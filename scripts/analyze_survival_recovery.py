@@ -17,13 +17,26 @@ STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
 PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_survival_curves.png")
 JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "survival_results.json")
 
-AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
-STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]
+def get_gcp_project_id():
+    env_id = os.environ.get("GCP_PROJECT_ID")
+    if env_id:
+        return env_id
+    try:
+        import google.auth
+        _, project = google.auth.default()
+        if project:
+            return project
+    except Exception:
+        pass
+    return "project-308492-gcp-70-1"
+
+GCP_PROJECT_ID = get_gcp_project_id()
+BIGQUERY_DATASET_ID = "sp500_analytics"
 
 def run_survival_analysis():
     """
     Step 5: Kaplan-Meier Survival Analysis & Log-Rank Test
-    1. Reads daily stock prices.
+    1. Reads stock prices directly from GCP BigQuery Data Warehouse.
     2. Identifies Drawdown events (>10% drop from peak).
     3. Measures recovery duration in trading days (Duration Days) and censorship (Event=1 if recovered, 0 if not).
     4. Computes Kaplan-Meier survival curves and Log-Rank Test p-value.
@@ -33,10 +46,16 @@ def run_survival_analysis():
     print("Step 5: Kaplan-Meier Survival Analysis & Log-Rank Test")
     print("=" * 65)
     
-    if not os.path.exists(STOCK_CSV_PATH):
-        raise FileNotFoundError("stock_prices_5y.csv missing. Run ingest_raw_data.py first.")
-        
-    df_stock = pd.read_csv(STOCK_CSV_PATH)
+    try:
+        from google.cloud import bigquery
+        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
+        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
+        print(f"[BigQuery Data Warehouse] Successfully queried fact_stock_prices directly from GCP Cloud Dataset '{BIGQUERY_DATASET_ID}'")
+    except Exception as e:
+        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV file...")
+        if not os.path.exists(STOCK_CSV_PATH):
+            raise FileNotFoundError("stock_prices_5y.csv missing. Run ingest_raw_data.py first.")
+        df_stock = pd.read_csv(STOCK_CSV_PATH)
     df_stock = df_stock[df_stock["Ticker"] != "^GSPC"].copy()
     df_stock["Date"] = pd.to_datetime(df_stock["Date"])
     df_stock = df_stock.sort_values(["Ticker", "Date"]).reset_index(drop=True)

@@ -55,11 +55,18 @@ def run_linear_regression():
     print("Step 4: OLS Linear Regression Analysis (12-Month Rolling Return % YoY)")
     print("=" * 65)
     
-    if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
-        raise FileNotFoundError("Input CSV files missing. Please run ingest_raw_data.py first.")
-        
-    df_stock = pd.read_csv(STOCK_CSV_PATH)
-    df_macro = pd.read_csv(MACRO_CSV_PATH)
+    try:
+        from google.cloud import bigquery
+        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
+        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
+        df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
+        print(f"[BigQuery Data Warehouse] Successfully queried fact_stock_prices & dim_inflation_rates directly from GCP Cloud Dataset '{BIGQUERY_DATASET_ID}'")
+    except Exception as e:
+        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
+        if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
+            raise FileNotFoundError("Input CSV files missing. Please run ingest_raw_data.py first.")
+        df_stock = pd.read_csv(STOCK_CSV_PATH)
+        df_macro = pd.read_csv(MACRO_CSV_PATH)
     
     df_stock["Date"] = pd.to_datetime(df_stock["Date"])
     df_stock["YearMonth"] = df_stock["Date"].dt.strftime("%Y-%m")
