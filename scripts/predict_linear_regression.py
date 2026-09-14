@@ -188,7 +188,7 @@ def run_linear_regression():
     print(f"Generated prediction comparison chart: {PLOT_OUTPUT_PATH}")
     
     # 7. Execute BigQuery ML Model Training if ENABLE_BQML is True
-    bqml_sql = f"CREATE OR REPLACE MODEL `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.model_ols_rolling_return` OPTIONS(model_type='linear_reg', input_label_cols=['Rolling12M_Return']) AS SELECT Rolling12M_Return, Lag1_CPI, Lag1_FedRate, Lag1_SP500, Lag1_Stock FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`"
+    bqml_sql = f"CREATE OR REPLACE MODEL `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.model_ols_stock_price` OPTIONS(model_type='linear_reg', input_label_cols=['Close']) AS SELECT Close, Volume FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`"
     
     if ENABLE_BQML:
         print("\nExecuting BigQuery ML Model Training on GCP Cloud...")
