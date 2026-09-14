@@ -6,7 +6,20 @@ import pandas as pd
 # GCP Infrastructure Configuration Parameters
 # (Ready for deployment on GCP Compute Engine VM / Cloud Shell)
 # ==============================================================================
-GCP_PROJECT_ID = "sp500-analytics-project"
+def get_gcp_project_id():
+    env_id = os.environ.get("GCP_PROJECT_ID")
+    if env_id:
+        return env_id
+    try:
+        import google.auth
+        _, project = google.auth.default()
+        if project:
+            return project
+    except Exception:
+        pass
+    return "project-308492-gcp-70-1"
+
+GCP_PROJECT_ID = get_gcp_project_id()
 GCS_BUCKET_NAME = "sp500-analytics-raw-data"
 BIGQUERY_DATASET_ID = "sp500_analytics"
 

@@ -19,7 +19,20 @@ PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_actual_vs_predicted.png")
 JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "linear_regression_results.json")
 
 # GCP BigQuery ML Configuration Parameters
-GCP_PROJECT_ID = "sp500-analytics-project"
+def get_gcp_project_id():
+    env_id = os.environ.get("GCP_PROJECT_ID")
+    if env_id:
+        return env_id
+    try:
+        import google.auth
+        _, project = google.auth.default()
+        if project:
+            return project
+    except Exception:
+        pass
+    return "project-308492-gcp-70-1"
+
+GCP_PROJECT_ID = get_gcp_project_id()
 BIGQUERY_DATASET_ID = "sp500_analytics"
 ENABLE_BQML = os.environ.get("ENABLE_BQML", "False").lower() == "true"
 
