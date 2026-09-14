@@ -16,6 +16,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
 PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_survival_curves.png")
 JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "survival_results.json")
+AI_TECH_TICKERS = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "AVGO", "TSLA", "AMD", "QCOM"]
 
 def get_gcp_project_id():
     env_id = os.environ.get("GCP_PROJECT_ID")
