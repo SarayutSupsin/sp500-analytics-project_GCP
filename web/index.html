@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial S&P 500 Analytics</title>
+    <!-- Google Fonts: Outfit & Sarabun -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container header-container">
+            <div class="brand">
+                <h1>Financial S&P 500 Analytics</h1>
+                <p class="subtitle">ระบบวิเคราะห์ข้อมูลราคาหุ้น S&P 500 เทียบอัตราเงินเฟ้อ (CPI) และอัตราดอกเบี้ยนโยบาย (Fed Rate) [2021 - 2026]</p>
+            </div>
+            <div class="header-stats">
+                <div class="stat-pill">
+                    <span class="label">จำนวนหุ้นวิเคราะห์</span>
+                    <span class="value">20 หุ้น</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="label">ระยะเวลาข้อมูล</span>
+                    <span class="value">5 ปีย้อนหลัง</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="nav-tabs-bar">
+        <div class="container tabs-container">
+            <button class="tab-btn" id="tab-btn-1" onclick="switchTab(1)">
+                <span class="tab-num">วิธีที่ 1</span>
+                <span class="tab-title">📊 Pearson Correlation (เงินเฟ้อ & ดอกเบี้ย)</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-2" onclick="switchTab(2)">
+                <span class="tab-num">วิธีที่ 2</span>
+                <span class="tab-title">🔮 OLS Linear Regression (พยากรณ์รายหุ้น)</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-3" onclick="switchTab(3)">
+                <span class="tab-num">วิธีที่ 3</span>
+                <span class="tab-title">📈 Kaplan-Meier Survival (เวลาฟื้นตัว)</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="container main-content">
+        <!-- ========================================== -->
+        <!-- TAB 1: PEARSON CORRELATION ANALYSIS (HEATMAP) -->
+        <!-- ========================================== -->
+        <section id="tab-content-1" class="tab-content">
+            <div class="section-intro card">
+                <h2>วิธีที่ 1: Pearson Correlation Analysis (วิเคราะห์ผลกระทบเงินเฟ้อ & ดอกเบี้ยรายเดือน)</h2>
+                <p class="description">
+                    คำนวณค่าสหสัมพันธ์เชิงเส้น Pearson Correlation (ค่า r) ระหว่าง % ผลตอบแทนรายเดือนของหุ้นแต่ละตัว เทียบกับ อัตราเงินเฟ้อ (CPI % YoY) และ อัตราดอกเบี้ยนโยบาย (Fed Rate %)
+                </p>
+            </div>
+
+            <!-- Controls Panel: Period & Sector Filters -->
+            <div class="controls-panel card">
+                <div class="control-group">
+                    <label class="control-label" for="select-year-range">เลือกช่วงเวลาวิเคราะห์:</label>
+                    <select id="select-year-range" onchange="applyTab1Filters()">
+                        <option value="ALL">ภาพรวมทั้งหมด 5 ปี (2021 - 2026)</option>
+                        <optgroup label="─── แบ่งตามช่วง 2 ปี ───">
+                            <option value="2021-2022">ช่วงปี 2021 - 2022 (2 ปี)</option>
+                            <option value="2023-2024">ช่วงปี 2023 - 2024 (2 ปี)</option>
+                            <option value="2025-2026">ช่วงปี 2025 - 2026 (2 ปี)</option>
+                        </optgroup>
+                        <optgroup label="─── แบ่งเจาะลึกรายปี ───">
+                            <option value="2021">เฉพาะปี 2021</option>
+                            <option value="2022">เฉพาะปี 2022</option>
+                            <option value="2023">เฉพาะปี 2023</option>
+                            <option value="2024">เฉพาะปี 2024</option>
+                            <option value="2025">เฉพาะปี 2025</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">เลือกกลุ่มอุตสาหกรรม:</label>
+                    <div class="sector-filters">
+                        <label class="checkbox-label"><input type="checkbox" id="filter-sector-tech" checked onchange="applyTab1Filters()"> 🤖 กลุ่มเทคโนโลยี AI (10 หุ้น)</label>
+                        <label class="checkbox-label"><input type="checkbox" id="filter-sector-staples" checked onchange="applyTab1Filters()"> 🛒 กลุ่มสินค้าจำเป็น (10 หุ้น)</label>
+                    </div>
+                </div>
+                <div class="sample-count-pill" id="sample-count-badge">
+                    งวดข้อมูล: <strong id="sample-month-count">66</strong> เดือน | 
+                    CPI (ต่ำสุด-สูงสุด): <strong id="sample-cpi-range">-</strong> | 
+                    Fed Rate (ต่ำสุด-สูงสุด): <strong id="sample-fed-range">-</strong>
+                </div>
+                <div class="statistical-note-box" style="margin-top: 10px; font-size: 13px; color: #94a3b8; background: rgba(30, 41, 59, 0.5); padding: 8px 14px; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                    <strong>📌 หมายเหตุทางสถิติ (Statistical Validity Note):</strong> แสดงกรอบช่วงตัวเลขจริง (Min – Max Range) พร้อมค่าเฉลี่ย เพื่อสะท้อนความผันผวนของปัจจัยมหภาคอย่างตรงไปตรงมาโดยไม่บดบังความจริงทางสถิติ
+                </div>
+            </div>
+
+            <!-- Tab 1 Full-Width Heatmap Card -->
+            <div class="card chart-card">
+                <h3>ตารางแผนที่ความร้อน (Correlation Heatmap Matrix)</h3>
+                <div class="heatmap-scroll">
+                    <table class="heatmap-table" id="table-heatmap">
+                        <thead>
+                            <tr>
+                                <th>ชื่อหุ้น</th>
+                                <th>กลุ่มอุตสาหกรรม</th>
+                                <th>ความสัมพันธ์อัตราเงินเฟ้อ (CPI % YoY)</th>
+                                <th>ความสัมพันธ์อัตราดอกเบี้ย (Fed Rate %)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Inserted dynamically by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Guide Box -->
+            <div class="chart-desc">
+                <strong>💡 คู่มือการอ่านค่า Pearson Correlation (ค่า r)</strong>:
+                <br>• <strong>ค่าบวก (+0.01 ถึง +1.00 / โทนสีแดง)</strong>: ผลตอบแทนหุ้นเคลื่อนที่ทิศทางเดียวกับเงินเฟ้อ/ดอกเบี้ย
+                <br>• <strong>ค่าลบ (-0.01 ถึง -1.00 / โทนสีน้ำเงิน)</strong>: ผลตอบแทนหุ้นเคลื่อนที่สวนทางกับเงินเฟ้อ/ดอกเบี้ย
+                <br>• <strong>เข้าใกล้ 0.00 (โทนสีเทา)</strong>: ผลตอบแทนหุ้นเคลื่อนที่โดยไม่อิงตามปัจจัยดังกล่าวอย่างมีนัยสำคัญ
+                <br>• <strong>N/A (สีเทาอ่อน)</strong>: จำนวนงวดข้อมูลที่ตรงตามเงื่อนไขมีน้อยกว่า 3 เดือน ไม่เพียงพอต่อการคำนวณสถิติ
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: OLS LINEAR REGRESSION MODEL -->
+        <!-- ========================================== -->
+        <section id="tab-content-2" class="tab-content">
+            <div class="section-intro card">
+                <h2>วิธีที่ 2: OLS Linear Regression Model (พยากรณ์ผลตอบแทนรายหุ้นจากปัจจัยเงินเฟ้อและดอกเบี้ย)</h2>
+                <p class="description">
+                    ประเมินความไวของอัตราการเติบโตสะสม 12 เดือน (12-Month Rolling Return % YoY) ต่อปัจจัยอัตราเงินเฟ้อ (CPI Inflation % YoY) และอัตราดอกเบี้ยนโยบายสหรัฐฯ (Fed Funds Rate %) ด้วยสมการการถดถอย OLS Linear Regression
+                </p>
+            </div>
+
+            <div class="controls-panel card">
+                <div class="control-group">
+                    <label class="control-label" for="select-ticker-ols">เลือกหุ้นที่ต้องการดูผลประเมินโมเดล OLS:</label>
+                    <select id="select-ticker-ols" onchange="renderTab2Charts()">
+                        <!-- Inserted dynamically by JS -->
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="select-ols-year-range">เลือกช่วงเวลาสำหรับโมเดล OLS:</label>
+                    <select id="select-ols-year-range" onchange="renderTab2Data()">
+                        <option value="ALL">ภาพรวมทั้งหมด 5 ปี (2021 - 2026)</option>
+                        <optgroup label="─── แบ่งตามช่วง 2 ปี ───">
+                            <option value="2021-2022">ช่วงปี 2021 - 2022 (2 ปี)</option>
+                            <option value="2023-2024">ช่วงปี 2023 - 2024 (2 ปี)</option>
+                            <option value="2025-2026">ช่วงปี 2025 - 2026 (2 ปี)</option>
+                        </optgroup>
+                        <optgroup label="─── แบ่งเจาะลึกรายปี ───">
+                            <option value="2022">เฉพาะปี 2022</option>
+                            <option value="2023">เฉพาะปี 2023</option>
+                            <option value="2024">เฉพาะปี 2024</option>
+                            <option value="2025">เฉพาะปี 2025</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="ticker-summary-box" id="ols-ticker-summary">
+                    <!-- Populated dynamically by JS -->
+                </div>
+            </div>
+
+            <div class="grid-2col">
+                <div class="card chart-card sticky-chart-card">
+                    <h3>เปรียบเทียบผลตอบแทนสะสม 12 เดือน (YoY) vs โมเดล OLS</h3>
+                    <div class="chart-wrapper" id="ols-chart-wrapper">
+                    <canvas id="chart-ols-prediction"></canvas>
+                    <div class="chart-empty-msg" id="ols-chart-empty" style="display:none;">
+                        <p>ไม่มีข้อมูลผลตอบแทนในรอบ 12 เดือนสำหรับช่วงเวลานี้</p>
+                        <p style="font-size: 12px; color: #94a3b8;">เนื่องจากต้องมีข้อมูลย้อนหลังอย่างน้อย 12 เดือนก่อนช่วงเวลาที่เลือก เปลี่ยนเป็นช่วงเวลาอื่นหรือภาพรวม 5 ปี</p>
+                    </div>
+                </div>
+                </div>
+                <div class="card table-card">
+                    <div class="table-header-filter">
+                        <h3 style="margin-bottom: 0;">ตารางระดับความไวต่อเงินเฟ้อและดอกเบี้ย</h3>
+                        <div class="mini-btn-group">
+                            <button class="mini-btn active" id="btn-ols-filter-all" onclick="filterTab2TableSector('ALL')">ทั้งหมด (20)</button>
+                            <button class="mini-btn" id="btn-ols-filter-tech" onclick="filterTab2TableSector('AI-Tech')">AI-Tech (10)</button>
+                            <button class="mini-btn" id="btn-ols-filter-staples" onclick="filterTab2TableSector('Consumer Staples')">Consumer Staples (10)</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="data-table" id="table-ols-metrics">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อหุ้น</th>
+                                    <th>กลุ่มอุตสาหกรรม</th>
+                                    <th>ความแม่นยำ (R²)</th>
+                                    <th>ความคลาดเคลื่อน (MAE %)</th>
+                                    <th>สัมประสิทธิ์เงินเฟ้อ (β CPI)</th>
+                                    <th>สัมประสิทธิ์ดอกเบี้ย (β Fed Rate)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Inserted dynamically by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guide Box -->
+            <div class="chart-desc">
+                <strong>💡 คู่มือการอ่านผลลัพธ์และตัวชี้วัด (อ่านง่ายใน 4 ข้อ)</strong>:
+                <br>• 🔵 <strong>เส้นทึบสีฟ้า (ผลตอบแทนจริง)</strong>: อัตราผลตอบแทนจริงของหุ้นในรอบ 1 ปี (เปรียบเทียบราคาเดือนเดียวกัน เทียบกับปีที่แล้ว)
+                <br>• 🔴 <strong>เส้นปรุสีแดง (ผลคำนวณจากทฤษฎี)</strong>: อัตราผลตอบแทนที่คำนวณประเมินขึ้นจากปัจจัยเงินเฟ้อ (CPI) และดอกเบี้ย (Fed Rate)
+                <br>• 📊 <strong>ความแม่นยำ (R²)</strong>: บอกว่าหุ้นตัวนี้วิ่งตามเงินเฟ้อกะดอกเบี้ยกี่ % (ยิ่งเข้าใกล้ 100% แสดงว่าราคาหุ้นยึดเกาะกับทิศทางเศรษฐกิจมหภาคสูง)
+                <br>• 📉 <strong>ความคลาดเคลื่อน (MAE %)</strong>: บอกระดับความผันผวนเฉพาะตัวของหุ้น (ยิ่ง % น้อย = หุ้นยิ่งเสถียรนิ่งๆ ตามทฤษฎี, ถ้า % เยอะ = หุ้นแกว่งตัวแรงจากข่าวเฉพาะตัว)
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: KAPLAN-MEIER SURVIVAL ANALYSIS -->
+        <!-- ========================================== -->
+        <section id="tab-content-3" class="tab-content">
+            <div class="section-intro card">
+                <h2>วิธีที่ 3: Kaplan-Meier Survival Analysis (วิเคราะห์ระยะเวลาการฟื้นตัวของราคาหุ้น)</h2>
+                <p class="description">
+                    วิเคราะห์สถิติระยะเวลา (วันปฏิทิน: Calendar Days) ที่ราคาหุ้นใช้ในการฟื้นตัวกลับสู่จุดสูงสุดเดิม (Peak Recovery) หลังจากการย่อตัว (Drawdown > 10%) เพื่อเปรียบเทียบความเร็วในการฟื้นตัวระหว่างกลุ่ม AI-Tech และ Consumer Staples
+                </p>
+            </div>
+
+            <!-- Controls Panel: Period & Ticker Filters -->
+            <div class="controls-panel card">
+                <div class="control-group">
+                    <label class="control-label" for="select-survival-year-range">เลือกช่วงเวลาวิเคราะห์:</label>
+                    <select id="select-survival-year-range" onchange="applyTab3Filters()">
+                        <option value="ALL">ภาพรวมทั้งหมด 5 ปี (2021 - 2026)</option>
+                        <optgroup label="─── แบ่งรายปีเดี่ยว ───">
+                            <option value="2021">ปี 2021</option>
+                            <option value="2022">ปี 2022</option>
+                            <option value="2023">ปี 2023</option>
+                            <option value="2024">ปี 2024</option>
+                            <option value="2025">ปี 2025</option>
+                            <option value="2026">ปี 2026</option>
+                        </optgroup>
+                        <optgroup label="─── แบ่งตามช่วง 2 ปี ───">
+                            <option value="2021-2022">ช่วงปี 2021 - 2022 (2 ปี)</option>
+                            <option value="2023-2024">ช่วงปี 2023 - 2024 (2 ปี)</option>
+                            <option value="2025-2026">ช่วงปี 2025 - 2026 (2 ปี)</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="select-ticker-survival">เลือกระบุหุ้นวิเคราะห์:</label>
+                    <select id="select-ticker-survival" onchange="applyTab3Filters()">
+                        <option value="ALL">ทุกหุ้น (ภาพรวม 2 กลุ่มอุตสาหกรรม)</option>
+                        <optgroup label="─── กลุ่มเทคโนโลยี AI ───">
+                            <option value="NVDA">NVDA - NVIDIA Corporation</option>
+                            <option value="MSFT">MSFT - Microsoft Corporation</option>
+                            <option value="GOOGL">GOOGL - Alphabet Inc.</option>
+                            <option value="META">META - Meta Platforms</option>
+                            <option value="ORCL">ORCL - Oracle Corporation</option>
+                            <option value="AMD">AMD - Advanced Micro Devices</option>
+                            <option value="AVGO">AVGO - Broadcom Inc.</option>
+                            <option value="AMZN">AMZN - Amazon.com Inc.</option>
+                            <option value="AAPL">AAPL - Apple Inc.</option>
+                            <option value="QCOM">QCOM - Qualcomm Inc.</option>
+                        </optgroup>
+                        <optgroup label="─── กลุ่มสินค้าจำเป็น (Consumer Staples) ───">
+                            <option value="PG">PG - Procter & Gamble</option>
+                            <option value="KO">KO - The Coca-Cola Company</option>
+                            <option value="PEP">PEP - PepsiCo Inc.</option>
+                            <option value="WMT">WMT - Walmart Inc.</option>
+                            <option value="COST">COST - Costco Wholesale</option>
+                            <option value="MDLZ">MDLZ - Mondelez International</option>
+                            <option value="CL">CL - Colgate-Palmolive</option>
+                            <option value="GIS">GIS - General Mills</option>
+                            <option value="TGT">TGT - Target Corporation</option>
+                            <option value="SYY">SYY - Sysco Corporation</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Top 3 KPI Cards -->
+            <div class="kpi-grid">
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title" id="km-label-1">มัธยฐานเวลาฟื้นตัว (กลุ่ม AI-Tech)</span>
+                    </div>
+                    <div class="kpi-body">
+                        <span class="kpi-value" id="km-tech-median">-</span>
+                        <span class="kpi-subtitle" id="km-sub-1">Median Recovery Days</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title" id="km-label-2">มัธยฐานเวลาฟื้นตัว (กลุ่ม Consumer Staples)</span>
+                    </div>
+                    <div class="kpi-body">
+                        <span class="kpi-value" id="km-staples-median">-</span>
+                        <span class="kpi-subtitle" id="km-sub-2">Median Recovery Days</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card highlight-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title" id="km-label-3">ผลการทดสอบสถิติ (Log-Rank Test)</span>
+                    </div>
+                    <div class="kpi-body">
+                        <span class="kpi-value" id="km-logrank-p">-</span>
+                        <span class="kpi-subtitle" id="km-logrank-status">p-value</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main 2-Column Section: Chart (Left) & Ticker Table (Right) -->
+            <div class="tab-grid grid-2col">
+                <!-- Left Panel: Kaplan-Meier Curve Chart -->
+                <div class="card chart-panel">
+                    <div class="card-header">
+                        <h3>📊 กราฟสถิติโอกาสที่ราคายังไม่ฟื้นตัว (Kaplan-Meier Step Curve)</h3>
+                        <p class="card-subtitle">แกน Y แสดงโอกาส S(t) ที่ราคายังไม่ฟื้นกลับสู่ Peak เดิม | แกน X แสดงจำนวนวันปฏิทิน</p>
+                        <p id="survival-focus-hint" class="chart-focus-hint" style="display: none;"></p>
+                    </div>
+                    <div class="chart-container" style="min-height: 420px; position: relative;"><canvas id="chart-survival-curve"></canvas></div>
+                </div>
+
+                <!-- Right Panel: Ticker Recovery Table -->
+                <div class="card table-panel">
+                    <div class="card-header">
+                        <h3>📋 สรุปสถิติระยะเวลาฟื้นตัวรายหุ้น (20 หุ้น)</h3>
+                        <p class="card-subtitle">คลิกที่แถวหุ้นเพื่อดูรายละเอียดสถิติรายตัว</p>
+                    </div>
+                    <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+                        <table class="data-table" id="table-survival-tickers">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อหุ้น</th>
+                                    <th>กลุ่มอุตสาหกรรม</th>
+                                    <th>Drawdown ปัจจุบัน</th>
+                                    <th>จำนวนครั้งย่อตัว</th>
+                                    <th>มัธยฐานวันฟื้นตัว</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Inserted dynamically by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="ticker-survival-summary-badge" class="selected-summary-box mt-3" style="display: none;">
+                        <!-- Inserted dynamically on click -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guide Box -->
+            <div class="chart-desc card">
+                <strong>💡 คู่มือการอ่านกราฟและสถิติ Kaplan-Meier Analysis</strong>:
+                <br>• 📉 <strong>เส้น Step Curve S(t)</strong>: แสดงโอกาสความน่าจะเป็นที่ราคาหุ้นยังฟื้นตัวกลับสู่จุดสูงสุดเดิม (Peak) ไม่สำเร็จ ณ เวลา t (วันปฏิทิน)
+                <br>• 🔴 <strong>เส้นสีแดง (AI-Tech) vs 🟢 เส้นสีเขียว (Consumer Staples)</strong>: ยิ่งเส้นดิ่งลงมาแตะ 0 เร็ว แสดงว่าหุ้นกลุ่มนั้นฟื้นตัวกลับมาเท่าทุนได้ไวกว่า
+                <br>• ⏱️ <strong>มัธยฐานเวลาฟื้นตัว (Median Days)</strong>: ระยะเวลา (วันปฏิทิน) ที่ 50% ของเหตุการณ์ย่อตัวทั้งหมดฟื้นกลับสู่ Peak เดิมเรียบร้อยแล้ว
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="container footer-container">
+            <p>Financial S&P 500 Analytics Dashboard</p>
+            <p class="copyright">ข้อมูลดิบ 5 ปีย้อนหลัง (2021 - 2026) จาก Yahoo Finance & FRED API</p>
+        </div>
+    </footer>
+
+    <!-- Consolidated Data Payload JS -->
+    <script src="../outputs/dashboard_data.js?v=20260914_11"></script>
+    <script src="app.js?v=20260914_11"></script>
+</body>
+</html>
