@@ -35,52 +35,25 @@ def clean_nan_values(obj):
         return [clean_nan_values(v) for v in obj]
     return obj
 
-def get_gcp_project_id():
-    env_id = os.environ.get("GCP_PROJECT_ID")
-    if env_id:
-        return env_id
-    try:
-        import google.auth
-        _, project = google.auth.default()
-        if project:
-            return project
-    except Exception:
-        pass
-    return "project-308492-gcp-70-1"
-
-GCP_PROJECT_ID = get_gcp_project_id()
-BIGQUERY_DATASET_ID = "sp500_analytics"
-
 def export_all_dashboard_data():
     """
     Step 6: Dashboard Data Aggregation & Export
-    Aggregates all raw historical data from BigQuery Data Warehouse, correlation, linear regression,
-    and survival analysis into a single, consolidated dashboard_data.json and dashboard_data.js for UI rendering.
+    Aggregates all raw historical data, correlation, linear regression, and survival analysis
+    into a single, consolidated dashboard_data.json and dashboard_data.js for UI rendering.
     """
     print("=" * 65)
     print("Step 6: Exporting Consolidated Dashboard Data (dashboard_data.json & dashboard_data.js)")
     print("=" * 65)
     
     # Verify presence of prior step outputs
-    required_files = [CORR_JSON_PATH, REG_JSON_PATH, SURV_JSON_PATH]
+    required_files = [STOCK_CSV_PATH, STOCK_DAILY_CSV_PATH, MACRO_CSV_PATH, CORR_JSON_PATH, REG_JSON_PATH, SURV_JSON_PATH]
     for fpath in required_files:
         if not os.path.exists(fpath):
             raise FileNotFoundError(f"Required file missing: {fpath}. Please run steps 1-5 first.")
             
-    try:
-        from google.cloud import bigquery
-        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
-        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
-        df_stock_daily = df_stock.copy()
-        df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
-        print(f"[BigQuery Data Warehouse] Successfully queried fact_stock_prices & dim_inflation_rates directly from GCP Cloud Dataset '{BIGQUERY_DATASET_ID}'")
-    except Exception as e:
-        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
-        if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
-            raise FileNotFoundError(f"Required CSV files missing. Please run ingest_raw_data.py first.")
-        df_stock = pd.read_csv(STOCK_CSV_PATH)
-        df_stock_daily = pd.read_csv(STOCK_DAILY_CSV_PATH) if os.path.exists(STOCK_DAILY_CSV_PATH) else df_stock.copy()
-        df_macro = pd.read_csv(MACRO_CSV_PATH)
+    df_stock = pd.read_csv(STOCK_CSV_PATH)
+    df_stock_daily = pd.read_csv(STOCK_DAILY_CSV_PATH)
+    df_macro = pd.read_csv(MACRO_CSV_PATH)
     
     with open(CORR_JSON_PATH, "r", encoding="utf-8") as f:
         corr_data = json.load(f)

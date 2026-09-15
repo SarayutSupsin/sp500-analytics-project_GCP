@@ -60,6 +60,12 @@ def run_linear_regression():
         bq_client = bigquery.Client(project=GCP_PROJECT_ID)
         df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
         df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
+        if "Fed_Rate" not in df_macro.columns and "Fed_Interest_Rate" in df_macro.columns:
+            df_macro.rename(columns={"Fed_Interest_Rate": "Fed_Rate"}, inplace=True)
+        if "CPI_Inflation_YoY" not in df_macro.columns and "CPI_Inflation_Rate" in df_macro.columns:
+            df_macro.rename(columns={"CPI_Inflation_Rate": "CPI_Inflation_YoY"}, inplace=True)
+        if "Date" not in df_macro.columns and "YearMonth" in df_macro.columns:
+            df_macro.rename(columns={"YearMonth": "Date"}, inplace=True)
         print(f"[BigQuery Data Warehouse] Successfully queried fact_stock_prices & dim_inflation_rates directly from GCP Cloud Dataset '{BIGQUERY_DATASET_ID}'")
     except Exception as e:
         print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
@@ -195,7 +201,58 @@ def run_linear_regression():
     print(f"Generated prediction comparison chart: {PLOT_OUTPUT_PATH}")
     
     # 7. Execute BigQuery ML Model Training if ENABLE_BQML is True
-    bqml_sql = f"CREATE OR REPLACE MODEL `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.model_ols_stock_price` OPTIONS(model_type='linear_reg', input_label_cols=['Close']) AS SELECT Close, Volume FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`"
+    bqml_sql = f"""
+    CREATE OR REPLACE MODEL `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.model_ols_rolling_return`
+    OPTIONS(model_type='linear_reg', input_label_cols=['Rolling12M_Return']) AS
+    WITH monthly_stock AS (
+        SELECT 
+            Ticker,
+            FORMAT_DATE('%Y-%m', Date) AS YearMonth,
+            AVG(Close) AS Close
+        FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`
+        GROUP BY Ticker, YearMonth
+    ),
+    stock_returns AS (
+        SELECT 
+            Ticker,
+            YearMonth,
+            Close,
+            (Close - LAG(Close, 12) OVER (PARTITION BY Ticker ORDER BY YearMonth)) / NULLIF(LAG(Close, 12) OVER (PARTITION BY Ticker ORDER BY YearMonth), 0) * 100 AS Rolling12M_Return
+        FROM monthly_stock
+    ),
+    sp500_returns AS (
+        SELECT YearMonth, Rolling12M_Return AS SP500_Return
+        FROM stock_returns
+        WHERE Ticker = '^GSPC'
+    ),
+    lagged_features AS (
+        SELECT 
+            s.Ticker,
+            s.YearMonth,
+            s.Rolling12M_Return,
+            LAG(i.CPI_Inflation_YoY, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_CPI,
+            LAG(r.Fed_Interest_Rate, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_FedRate,
+            LAG(sp.SP500_Return, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_SP500,
+            LAG(s.Rolling12M_Return, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_Stock
+        FROM stock_returns s
+        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates` i ON s.YearMonth = i.YearMonth
+        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_interest_rates` r ON s.YearMonth = r.YearMonth
+        LEFT JOIN sp500_returns sp ON s.YearMonth = sp.YearMonth
+    )
+    SELECT 
+        Rolling12M_Return,
+        Lag1_CPI,
+        Lag1_FedRate,
+        Lag1_SP500,
+        Lag1_Stock
+    FROM lagged_features
+    WHERE Rolling12M_Return IS NOT NULL 
+      AND Lag1_CPI IS NOT NULL 
+      AND Lag1_FedRate IS NOT NULL 
+      AND Lag1_SP500 IS NOT NULL
+      AND Lag1_Stock IS NOT NULL
+      AND Ticker != '^GSPC'
+    """
     
     if ENABLE_BQML:
         print("\nExecuting BigQuery ML Model Training on GCP Cloud...")
@@ -212,7 +269,7 @@ def run_linear_regression():
     summary = {
         "status": "SUCCESS",
         "ticker_count": len(results),
-        "bigquery_ml_sql_sample": bqml_sql,
+        "bigquery_ml_sql_sample": bqml_sql.strip(),
         "results": results,
         "series_by_ticker": series_by_ticker,
         "results_by_period": results_by_period,

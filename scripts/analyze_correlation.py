@@ -22,26 +22,16 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
 MACRO_CSV_PATH = os.path.join(DATA_DIR, "cpi_fedrate_5y.csv")
 PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_correlation_heatmap.png")
-def get_gcp_project_id():
-    env_id = os.environ.get("GCP_PROJECT_ID")
-    if env_id:
-        return env_id
-    try:
-        import google.auth
-        _, project = google.auth.default()
-        if project:
-            return project
-    except Exception:
-        pass
-    return "project-308492-gcp-70-1"
+JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "correlation_results.json")
 
-GCP_PROJECT_ID = get_gcp_project_id()
-BIGQUERY_DATASET_ID = "sp500_analytics"
+# ล็อครายชื่อหุ้น 20 ตัวแยกตาม 2 กลุ่มอุตสาหกรรม (Ticker Level Integrity)
+AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
+STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]
 
 def run_correlation_analysis():
     """
     ขั้นตอนวิเคราะห์วิธีคิดที่ 1: Pearson Correlation Analysis
-    1. อ่านข้อมูลดิบราคาปิดรายเดือนและปัจจัยมหภาค จาก GCP BigQuery Data Warehouse
+    1. อ่านไฟล์ข้อมูลดิบราคาปิดรายเดือนและปัจจัยมหภาค
     2. คำนวณ % ผลตอบแทนรายเดือน (Monthly Return %) แยกรายหุ้นทั้ง 20 ตัว
     3. รวมตารางข้อมูลด้วยคีย์ YearMonth (จับคู่รายเดือน)
     4. คำนวณค่า Pearson Correlation (ค่า r) รายหุ้น (Ticker Level)
@@ -51,18 +41,11 @@ def run_correlation_analysis():
     print("วิธีคิดที่ 1 [METHOD 1]: Pearson Correlation Analysis (Ticker Level)")
     print("=" * 65)
     
-    try:
-        from google.cloud import bigquery
-        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
-        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
-        df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
-        print(f"[BigQuery Data Warehouse] Successfully queried fact_stock_prices & dim_inflation_rates directly from GCP Cloud Dataset '{BIGQUERY_DATASET_ID}'")
-    except Exception as e:
-        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
-        if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
-            raise FileNotFoundError("ไม่พบไฟล์ข้อมูลดิบ CSV กรุณารัน ingest_raw_data.py ก่อน")
-        df_stock = pd.read_csv(STOCK_CSV_PATH)
-        df_macro = pd.read_csv(MACRO_CSV_PATH)
+    if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
+        raise FileNotFoundError("ไม่พบไฟล์ข้อมูลดิบ CSV กรุณารัน ingest_raw_data.py ก่อน")
+        
+    df_stock = pd.read_csv(STOCK_CSV_PATH)
+    df_macro = pd.read_csv(MACRO_CSV_PATH)
     
     # กรองดัชนีอ้างอิงตลาด S&P 500 (^GSPC) ออกเพื่อคำนวณเฉพาะหุ้นรายตัว 20 ตัว
     df_stock = df_stock[df_stock["Ticker"] != "^GSPC"].copy()
