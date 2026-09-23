@@ -231,12 +231,12 @@ def run_linear_regression():
             s.YearMonth,
             s.Rolling12M_Return,
             LAG(i.CPI_Inflation_YoY, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_CPI,
-            LAG(r.Fed_Interest_Rate, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_FedRate,
+            LAG(r.Fed_Rate, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_FedRate,
             LAG(sp.SP500_Return, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_SP500,
             LAG(s.Rolling12M_Return, 1) OVER (PARTITION BY s.Ticker ORDER BY s.YearMonth) AS Lag1_Stock
         FROM stock_returns s
-        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates` i ON s.YearMonth = i.YearMonth
-        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_interest_rates` r ON s.YearMonth = r.YearMonth
+        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates` i ON s.YearMonth = SUBSTR(CAST(i.Date AS STRING), 1, 7)
+        LEFT JOIN `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_interest_rates` r ON s.YearMonth = SUBSTR(CAST(r.Date AS STRING), 1, 7)
         LEFT JOIN sp500_returns sp ON s.YearMonth = sp.YearMonth
     )
     SELECT 
