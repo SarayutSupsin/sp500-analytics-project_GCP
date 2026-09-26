@@ -39,7 +39,7 @@ def get_gcp_project_id():
 
 GCP_PROJECT_ID = get_gcp_project_id()
 BIGQUERY_DATASET_ID = "sp500_analytics"
-ENABLE_BQML = os.environ.get("ENABLE_BQML", "False").lower() == "true"
+ENABLE_BQML = os.environ.get("ENABLE_BQML", "True").lower() == "true"
 
 AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
 STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]

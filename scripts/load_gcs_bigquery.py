@@ -23,8 +23,8 @@ GCP_PROJECT_ID = get_gcp_project_id()
 GCS_BUCKET_NAME = "sp500-analytics-bucket"
 BIGQUERY_DATASET_ID = "sp500_analytics"
 
-# Toggle True when deploying with active GCP credentials (or set environment variable ENABLE_GCP_UPLOAD=true)
-ENABLE_GCP_UPLOAD = os.environ.get("ENABLE_GCP_UPLOAD", "False").lower() == "true"
+# Enable GCP Upload by default when running on GCP Cloud Environment
+ENABLE_GCP_UPLOAD = os.environ.get("ENABLE_GCP_UPLOAD", "True").lower() == "true"
 
 # Paths to raw input CSVs and outputs
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
