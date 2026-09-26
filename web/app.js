@@ -27,6 +27,11 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchDashboardData();
 });
 
+window.initDashboard = function() {
+    fetchDashboardData();
+};
+
+
 // Helper: Determine saved active tab from URL hash or localStorage
 function getSavedTab() {
     try {
@@ -408,12 +413,14 @@ function renderTab2Table(dataList, selectedTicker) {
         
         const coeffCpi = item.Coeff_CPI !== undefined ? item.Coeff_CPI : item.Coeff_Lag1_CPI;
         const coeffFed = item.Coeff_FedRate !== undefined ? item.Coeff_FedRate : item.Coeff_Lag1_FedRate;
+        const mseVal = item.MSE !== undefined && item.MSE !== null ? item.MSE : '-';
 
         tr.innerHTML = `
             <td><strong>${item.Ticker}</strong></td>
             <td><span class="tag-sector ${sectorClass}">${item.Sector}</span></td>
             <td>${item.R2_Score}</td>
             <td>${item.MAE}%</td>
+            <td>${mseVal}</td>
             <td>${coeffCpi >= 0 ? '+' + coeffCpi : coeffCpi}</td>
             <td>${coeffFed >= 0 ? '+' + coeffFed : coeffFed}</td>
         `;
@@ -442,6 +449,7 @@ function renderTab2Charts() {
     if (summaryBox && olsInfo) {
         const coeffCpi = olsInfo.Coeff_CPI !== undefined ? olsInfo.Coeff_CPI : olsInfo.Coeff_Lag1_CPI;
         const coeffFed = olsInfo.Coeff_FedRate !== undefined ? olsInfo.Coeff_FedRate : olsInfo.Coeff_Lag1_FedRate;
+        const mseVal = olsInfo.MSE !== undefined && olsInfo.MSE !== null ? olsInfo.MSE : '-';
         const periodText = selectedPeriod === "ALL" ? "ภาพรวม 5 ปี (2021 - 2026)" : `ช่วงเวลา: ${selectedPeriod}`;
 
         summaryBox.innerHTML = `
@@ -450,6 +458,7 @@ function renderTab2Charts() {
                 <div><strong>กรอบเวลาวิเคราะห์:</strong> <span style="color: #fbbf24; font-weight: 600;">${periodText}</span></div>
                 <div><strong>R² Score:</strong> <span style="color: #34d399; font-weight: 600;">${olsInfo.R2_Score}</span></div>
                 <div><strong>MAE:</strong> <span style="color: #f87171; font-weight: 600;">${olsInfo.MAE}%</span></div>
+                <div><strong>MSE:</strong> <span style="color: #c084fc; font-weight: 600;">${mseVal}</span></div>
                 <div><strong>สัมประสิทธิ์เงินเฟ้อ (β CPI):</strong> <span style="font-weight: 600;">${coeffCpi >= 0 ? '+' + coeffCpi : coeffCpi}</span></div>
                 <div><strong>สัมประสิทธิ์ดอกเบี้ย (β Fed Rate):</strong> <span style="font-weight: 600;">${coeffFed >= 0 ? '+' + coeffFed : coeffFed}</span></div>
             </div>
@@ -577,6 +586,22 @@ function initTab3Data() {
     applyTab3Filters();
 }
 
+function getPeriodLabel(periodKey) {
+    const periodMap = {
+        "ALL": "ภาพรวม 5 ปี (2021 - 2026)",
+        "2021": "ปี 2021",
+        "2022": "ปี 2022",
+        "2023": "ปี 2023",
+        "2024": "ปี 2024",
+        "2025": "ปี 2025",
+        "2026": "ปี 2026",
+        "2021-2022": "ช่วงปี 2021 - 2022 (2 ปี)",
+        "2023-2024": "ช่วงปี 2023 - 2024 (2 ปี)",
+        "2025-2026": "ช่วงปี 2025 - 2026 (2 ปี)"
+    };
+    return periodMap[periodKey] || periodKey;
+}
+
 function applyTab3Filters() {
     if (!dashboardData || !dashboardData.analytics || !dashboardData.analytics.survival_recovery) {
         return;
@@ -594,12 +619,22 @@ function applyTab3Filters() {
         periodData = survDict;
     }
     
-    renderTab3KPIs(periodData, selectedTicker);
+    const periodLabel = getPeriodLabel(selectedPeriod);
+    const mainTitle = document.getElementById("tab3-main-title");
+    if (mainTitle) {
+        if (selectedTicker && selectedTicker !== "ALL") {
+            mainTitle.textContent = `วิธีที่ 3: Kaplan-Meier Survival Analysis (${periodLabel} | หุ้น ${selectedTicker})`;
+        } else {
+            mainTitle.textContent = `วิธีที่ 3: Kaplan-Meier Survival Analysis (${periodLabel} | ภาพรวม 2 กลุ่มอุตสาหกรรม)`;
+        }
+    }
+    
+    renderTab3KPIs(periodData, selectedTicker, selectedPeriod);
     renderTab3Table(periodData, selectedTicker);
-    renderTab3Charts(periodData, selectedTicker);
+    renderTab3Charts(periodData, selectedTicker, selectedPeriod);
 }
 
-function renderTab3KPIs(data, selectedTicker = "ALL") {
+function renderTab3KPIs(data, selectedTicker = "ALL", selectedPeriod = "ALL") {
     const techEl = document.getElementById("km-tech-median");
     const staplesEl = document.getElementById("km-staples-median");
     const logrankEl = document.getElementById("km-logrank-p");
@@ -609,27 +644,52 @@ function renderTab3KPIs(data, selectedTicker = "ALL") {
     const label3 = document.getElementById("km-label-3");
     const sub1 = document.getElementById("km-sub-1");
     const sub2 = document.getElementById("km-sub-2");
+    const card3 = document.getElementById("km-card-3");
     
-    // KPI cards ALWAYS show the sector-level (group) summary for the selected period.
-    // Per-stock detail lives in the summary badge (below the table) + the chart's blue line.
-    
+    if (sub1) sub1.textContent = "";
+    if (sub2) sub2.textContent = "";
+
+    if (selectedTicker && selectedTicker !== "ALL" && data.ticker_level_recovery) {
+        const tItem = data.ticker_level_recovery.find(x => x.Ticker === selectedTicker);
+        if (tItem) {
+            const sectorMed = tItem.Sector === "AI-Tech" ? data.tech_median_days : data.staples_median_days;
+            const stockMedText = tItem.Median_Recovery_Days !== null && tItem.Median_Recovery_Days !== undefined ? `${tItem.Median_Recovery_Days} วันปฏิทิน` : "อยู่ระหว่างฟื้นตัวในปีนี้";
+            const sectorMedText = sectorMed !== null && sectorMed !== undefined ? `${sectorMed} วันปฏิทิน` : "ยังไม่เกิดการฟื้นตัวในปีนี้";
+            
+            if (label1) label1.textContent = `มัธยฐานเวลาฟื้นตัว (หุ้น ${tItem.Ticker})`;
+            if (label2) label2.textContent = `เกณฑ์เฉลี่ยกลุ่มอุตสาหกรรม (${tItem.Sector})`;
+            if (label3) label3.textContent = "ผลทดสอบสถิติภาพรวมกลุ่ม (Log-Rank Test)";
+            
+            if (techEl) techEl.textContent = stockMedText;
+            if (staplesEl) staplesEl.textContent = sectorMedText;
+            if (logrankEl) logrankEl.textContent = data.logrank_p_value !== undefined ? `p = ${data.logrank_p_value}` : "-";
+            if (statusEl) {
+                statusEl.textContent = data.statistically_significant ? "มีนัยสำคัญทางสถิติ (p < 0.05)" : "ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)";
+                statusEl.style.color = data.statistically_significant ? "#34d399" : "#fbbf24";
+            }
+
+            if (card3) card3.style.display = "block";
+            return;
+        }
+    }
+
+    // Default Group Baseline: Show Card 3 for 2-Sector Log-Rank Test
+    if (card3) card3.style.display = "block";
     if (label1) label1.textContent = "มัธยฐานเวลาฟื้นตัว (กลุ่ม AI-Tech)";
     if (label2) label2.textContent = "มัธยฐานเวลาฟื้นตัว (กลุ่ม Consumer Staples)";
     if (label3) label3.textContent = "ผลการทดสอบสถิติ (Log-Rank Test)";
-    if (sub1) sub1.textContent = "Median Recovery Days";
-    if (sub2) sub2.textContent = "Median Recovery Days";
     
     if (techEl) {
-        techEl.textContent = data.tech_median_days !== null && data.tech_median_days !== undefined ? `${data.tech_median_days} วัน` : "N/A (ยังไม่ฟื้น)";
+        techEl.textContent = data.tech_median_days !== null && data.tech_median_days !== undefined ? `${data.tech_median_days} วันปฏิทิน` : "ยังไม่ฟื้นตัวในปีนี้";
     }
     if (staplesEl) {
-        staplesEl.textContent = data.staples_median_days !== null && data.staples_median_days !== undefined ? `${data.staples_median_days} วัน` : "N/A (ยังไม่ฟื้น)";
+        staplesEl.textContent = data.staples_median_days !== null && data.staples_median_days !== undefined ? `${data.staples_median_days} วันปฏิทิน` : "ยังไม่ฟื้นตัวในปีนี้";
     }
     if (logrankEl) {
         logrankEl.textContent = data.logrank_p_value !== undefined ? `p = ${data.logrank_p_value}` : "-";
     }
     if (statusEl) {
-        statusEl.textContent = data.statistically_significant ? "p < 0.05 (มีนัยสำคัญทางสถิติ)" : "p >= 0.05 (ไม่มีนัยสำคัญ)";
+        statusEl.textContent = data.statistically_significant ? "มีนัยสำคัญทางสถิติ (p < 0.05)" : "ไม่มีนัยสำคัญทางสถิติ (p >= 0.05)";
         statusEl.style.color = data.statistically_significant ? "#34d399" : "#fbbf24";
     }
 }
@@ -639,8 +699,16 @@ function renderTab3Table(data, selectedTicker = "ALL") {
     if (!tbody) return;
     
     tbody.innerHTML = "";
-    const tickerList = data.ticker_level_recovery || [];
+    let tickerList = data.ticker_level_recovery || [];
     let selectedItem = null;
+    let targetTrElement = null;
+    
+    if (selectedTicker && selectedTicker !== "ALL") {
+        selectedItem = tickerList.find(x => x.Ticker === selectedTicker);
+        if (selectedItem) {
+            tickerList = tickerList.filter(x => x.Sector === selectedItem.Sector);
+        }
+    }
     
     sortStockRows(tickerList).forEach(item => {
         const tr = document.createElement("tr");
@@ -650,71 +718,54 @@ function renderTab3Table(data, selectedTicker = "ALL") {
         if (selectedTicker === item.Ticker) {
             tr.classList.add("selected-row");
             selectedItem = item;
+            targetTrElement = tr;
         }
         
         tr.onclick = () => {
             const dropdown = document.getElementById("select-ticker-survival");
-            // Clicking the already-selected row toggles back to the group overview
             if (tr.classList.contains("selected-row")) {
                 if (dropdown) dropdown.value = "ALL";
-                renderTab3Table(data, "ALL");
-                renderTab3Charts(data, "ALL");
-                renderTab3KPIs(data, "ALL");
+                applyTab3Filters();
                 return;
             }
             if (dropdown) dropdown.value = item.Ticker;
-            highlightTab3Ticker(item, tr);
-            renderTab3Charts(data, item.Ticker);
-            renderTab3KPIs(data, item.Ticker);
+            applyTab3Filters();
         };
         
-        const ddBadgeClass = item.Current_Drawdown_Pct >= 0 ? "badge-success" : "badge-danger";
-        const ddText = item.Current_Drawdown_Pct >= 0 ? "0.0% (Peak)" : `${item.Current_Drawdown_Pct}%`;
-        const medText = item.Median_Recovery_Days !== null && item.Median_Recovery_Days !== undefined ? `${item.Median_Recovery_Days} วัน` : "N/A (ยังไม่ฟื้น)";
+        const isRecovered = item.Median_Recovery_Days !== null && item.Median_Recovery_Days !== undefined;
+        const statusBadgeClass = isRecovered ? "badge-success" : "badge-warning";
+        const statusBadgeText = isRecovered ? "ฟื้นตัวสำเร็จ" : "ยังไม่ฟื้นตัวในปีนี้";
+        const medText = isRecovered ? `${item.Median_Recovery_Days} วัน` : "-";
+        const eventsText = item.Total_Drawdown_Events !== undefined && item.Total_Drawdown_Events !== null ? `${item.Total_Drawdown_Events} ครั้ง` : "-";
         
         tr.innerHTML = `
             <td><strong>${item.Ticker}</strong></td>
             <td><span class="badge ${item.Sector === 'AI-Tech' ? 'badge-tech' : 'badge-staples'}">${item.Sector}</span></td>
-            <td><span class="badge ${ddBadgeClass}">${ddText}</span></td>
-            <td>${item.Total_Drawdown_Events} ครั้ง</td>
             <td><strong>${medText}</strong></td>
+            <td><strong>${eventsText}</strong></td>
+            <td><span class="badge ${statusBadgeClass}">${statusBadgeText}</span></td>
         `;
         tbody.appendChild(tr);
     });
     
     const badgeBox = document.getElementById("ticker-survival-summary-badge");
     if (badgeBox) {
-        if (selectedItem) {
-            const medText = selectedItem.Median_Recovery_Days !== null && selectedItem.Median_Recovery_Days !== undefined ? `${selectedItem.Median_Recovery_Days} วันปฏิทิน` : "ยังฟื้นตัวไม่สมบูรณ์";
-            badgeBox.style.display = "block";
-            badgeBox.innerHTML = `
-                <strong>📌 สถิติรายหุ้น: ${selectedItem.Ticker} (${selectedItem.Sector})</strong><br>
-                • Drawdown ปัจจุบัน: <strong>${selectedItem.Current_Drawdown_Pct}%</strong> | Drawdown สูงสุดในอดีต: <strong>${selectedItem.Max_Historical_Drawdown_Pct}%</strong><br>
-                • จำนวนครั้งย่อตัว (>10%): <strong>${selectedItem.Total_Drawdown_Events} ครั้ง</strong> | มัธยฐานวันฟื้นตัว: <strong>${medText}</strong>
-            `;
-        } else {
-            badgeBox.style.display = "none";
-        }
+        badgeBox.style.display = "none";
+    }
+
+    if (targetTrElement) {
+        setTimeout(() => {
+            targetTrElement.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }, 100);
     }
 }
 
 function highlightTab3Ticker(item, trElement) {
     document.querySelectorAll("#table-survival-tickers tbody tr").forEach(r => r.classList.remove("selected-row"));
     if (trElement) trElement.classList.add("selected-row");
-    
-    const badgeBox = document.getElementById("ticker-survival-summary-badge");
-    if (!badgeBox) return;
-    
-    const medText = item.Median_Recovery_Days !== null && item.Median_Recovery_Days !== undefined ? `${item.Median_Recovery_Days} วันปฏิทิน` : "ยังฟื้นตัวไม่สมบูรณ์";
-    badgeBox.style.display = "block";
-    badgeBox.innerHTML = `
-        <strong>📌 สถิติรายหุ้น: ${item.Ticker} (${item.Sector})</strong><br>
-        • Drawdown ปัจจุบัน: <strong>${item.Current_Drawdown_Pct}%</strong> | Drawdown สูงสุดในอดีต: <strong>${item.Max_Historical_Drawdown_Pct}%</strong><br>
-        • จำนวนครั้งย่อตัว (>10%): <strong>${item.Total_Drawdown_Events} ครั้ง</strong> | มัธยฐานวันฟื้นตัว: <strong>${medText}</strong>
-    `;
 }
 
-function renderTab3Charts(overrideData, selectedTicker = "ALL") {
+function renderTab3Charts(overrideData, selectedTicker = "ALL", selectedPeriod = "ALL") {
     const canvasEl = document.getElementById("chart-survival-curve");
     if (!canvasEl) return;
     
@@ -722,8 +773,8 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
     if (!data && dashboardData && dashboardData.analytics && dashboardData.analytics.survival_recovery) {
         const survDict = dashboardData.analytics.survival_recovery;
         const periodSelect = document.getElementById("select-survival-year-range");
-        const selectedPeriod = periodSelect ? periodSelect.value : "ALL";
-        data = survDict.survival_recovery_by_period ? survDict.survival_recovery_by_period[selectedPeriod] : survDict;
+        const periodKey = periodSelect ? periodSelect.value : "ALL";
+        data = survDict.survival_recovery_by_period ? survDict.survival_recovery_by_period[periodKey] : survDict;
     }
     
     if (!data) return;
@@ -740,44 +791,70 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
     const staplesSeries = formatCurvePoints(data.staples_curve);
     
     const isDrill = !!(selectedTicker && selectedTicker !== "ALL");
+    const tItem = isDrill && data.ticker_level_recovery ? data.ticker_level_recovery.find(x => x.Ticker === selectedTicker) : null;
+    const isTech = tItem ? tItem.Sector === "AI-Tech" : true;
+
+    const datasets = [];
     
-    const datasets = [
-        {
+    if (!isDrill) {
+        // Overview Mode: Show both Sector Benchmarks
+        datasets.push({
             label: "กลุ่ม AI-Tech",
             data: techSeries,
-            borderColor: isDrill ? "rgba(244, 63, 94, 0.35)" : "#f43f5e",
+            borderColor: "#f43f5e",
             backgroundColor: "rgba(244, 63, 94, 0.1)",
-            borderWidth: isDrill ? 2 : 2.5,
-            borderDash: isDrill ? [6, 4] : [],
+            borderWidth: 2.5,
             pointRadius: 2,
             stepped: true,
             fill: false
-        },
-        {
+        });
+        datasets.push({
             label: "กลุ่ม Consumer Staples",
             data: staplesSeries,
-            borderColor: isDrill ? "rgba(16, 185, 129, 0.35)" : "#10b981",
+            borderColor: "#10b981",
             backgroundColor: "rgba(16, 185, 129, 0.1)",
-            borderWidth: isDrill ? 2 : 2.5,
-            borderDash: isDrill ? [6, 4] : [],
+            borderWidth: 2.5,
             pointRadius: 2,
             stepped: true,
             fill: false
+        });
+    } else {
+        // Single Ticker Mode: Only show parent sector benchmark to avoid chart clutter!
+        if (isTech) {
+            datasets.push({
+                label: "เฉลี่ยกลุ่ม AI-Tech",
+                data: techSeries,
+                borderColor: "rgba(244, 63, 94, 0.45)",
+                backgroundColor: "rgba(244, 63, 94, 0.05)",
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 2,
+                stepped: true,
+                fill: false
+            });
+        } else {
+            datasets.push({
+                label: "เฉลี่ยกลุ่ม Consumer Staples",
+                data: staplesSeries,
+                borderColor: "rgba(16, 185, 129, 0.45)",
+                backgroundColor: "rgba(16, 185, 129, 0.05)",
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 2,
+                stepped: true,
+                fill: false
+            });
         }
-    ];
-    
-    // Drilling into one stock: its curve becomes the focus line, groups stay as context
-    if (isDrill && data.ticker_level_recovery) {
-        const tItem = data.ticker_level_recovery.find(x => x.Ticker === selectedTicker);
+
         if (tItem && tItem.Curve) {
             const tSeries = formatCurvePoints(tItem.Curve);
             if (tSeries.length > 0) {
                 datasets.push({
                     label: `หุ้น ${selectedTicker}`,
                     data: tSeries,
-                    backgroundColor: "rgba(56, 189, 248, 0.1)",
-                    borderWidth: 4,
-                    pointRadius: 2.5,
+                    backgroundColor: "rgba(56, 189, 248, 0.15)",
+                    borderWidth: 3.5,
+                    pointRadius: 3,
                     pointBackgroundColor: "#38bdf8",
                     borderColor: "#38bdf8",
                     stepped: true,
@@ -787,7 +864,7 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
         }
     }
     
-    setSurvivalFocusHint(selectedTicker);
+    setSurvivalFocusHint(selectedTicker, tItem ? tItem.Sector : null, selectedPeriod);
     
     const ctx = canvasEl.getContext("2d");
     if (chartSurvivalCurve) {
@@ -801,7 +878,7 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
             responsive: true,
             maintainAspectRatio: false,
             animation: {
-                duration: 700,
+                duration: 600,
                 easing: "easeOutQuart"
             },
             scales: {
@@ -813,21 +890,24 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
                 },
                 y: {
                     min: 0,
-                    max: 1.0,
-                    ticks: { color: "#94a3b8", callback: (val) => val.toFixed(2) },
+                    max: 1.05,
+                    ticks: { color: "#94a3b8", callback: (val) => val <= 1.0 ? val.toFixed(2) : "" },
                     grid: { color: "#334155" },
-                    title: { display: true, text: "โอกาสที่ราคายังไม่ฟื้นตัว S(t)", color: "#f8fafc" }
+                    title: { display: true, text: "โอกาสที่ราคายังไม่ฟื้นตัว (%)", color: "#f8fafc" }
                 }
             },
             plugins: {
-                title: {
-                    display: isDrill,
-                    text: isDrill ? `📌 กำลังเจาะรายหุ้น ${selectedTicker} — เส้นฟ้าหนา = หุ้นนี้ / เส้นประจาง = กลุ่มเปรียบเทียบ` : "",
-                    color: "#7dd3fc",
-                    font: { weight: "bold", size: 13.5 },
-                    padding: { bottom: 8 }
+                title: { display: false },
+                legend: { 
+                    display: true,
+                    position: "top", 
+                    align: "center",
+                    labels: { 
+                        color: "#f8fafc",
+                        padding: 15,
+                        font: { size: 12 }
+                    } 
                 },
-                legend: { labels: { color: "#f8fafc" }, position: "top" },
                 tooltip: {
                     backgroundColor: "rgba(15, 23, 42, 0.95)",
                     titleColor: "#f8fafc",
@@ -839,7 +919,7 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
                         title: (items) => items && items[0] ? `วันปฏิทินที่: ${items[0].parsed.x} วัน` : "",
                         label: (context) => {
                             const val = context.parsed.y;
-                            return `${context.dataset.label}: โอกาสยังไม่ฟื้นตัว S(t) = ${(val * 100).toFixed(1)}%`;
+                            return `${context.dataset.label}: โอกาสยังไม่ฟื้นตัว ${(val * 100).toFixed(1)}%`;
                         }
                     }
                 }
@@ -848,16 +928,10 @@ function renderTab3Charts(overrideData, selectedTicker = "ALL") {
     });
 }
 
-function setSurvivalFocusHint(selectedTicker) {
+function setSurvivalFocusHint(selectedTicker, sectorName, selectedPeriod = "ALL") {
     const el = document.getElementById("survival-focus-hint");
     if (!el) return;
-    if (selectedTicker && selectedTicker !== "ALL") {
-        el.textContent = `📌 กำลังเจาะรายหุ้น ${selectedTicker} — เส้นฟ้า = หุ้นนี้ เส้นประจาง = กลุ่ม | คลิกหุ้นเดิมอีกครั้งเพื่อกลับไปภาพรวม`;
-        el.style.display = "block";
-    } else {
-        el.textContent = "";
-        el.style.display = "none";
-    }
+    el.style.display = "none";
 }
 
 // End of app.js

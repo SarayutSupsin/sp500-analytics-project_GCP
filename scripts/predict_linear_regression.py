@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 # File paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -12,11 +12,16 @@ BASE_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+REPORTS_DIR = os.path.join(OUTPUT_DIR, "reports")
+DATASETS_DIR = os.path.join(OUTPUT_DIR, "raw_json_datasets")
+
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(DATASETS_DIR, exist_ok=True)
+
 STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
 MACRO_CSV_PATH = os.path.join(DATA_DIR, "cpi_fedrate_5y.csv")
-PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_actual_vs_predicted.png")
-JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "linear_regression_results.json")
+PLOT_OUTPUT_PATH = os.path.join(REPORTS_DIR, "plot_actual_vs_predicted.png")
+JSON_OUTPUT_PATH = os.path.join(DATASETS_DIR, "linear_regression_results.json")
 
 # GCP BigQuery ML Configuration Parameters
 def get_gcp_project_id():
@@ -145,6 +150,7 @@ def run_linear_regression():
                 
                 r2 = r2_score(y, preds) if len(sub) > 1 else 0.0
                 mae = mean_absolute_error(y, preds)
+                mse = mean_squared_error(y, preds)
                 sector = "AI-Tech" if ticker in AI_TECH_TICKERS else "Consumer Staples"
                 
                 metric_entry = {
@@ -152,6 +158,7 @@ def run_linear_regression():
                     "Sector": sector,
                     "R2_Score": round(float(r2), 4),
                     "MAE": round(float(mae), 4),
+                    "MSE": round(float(mse), 4),
                     "Coeff_Intercept": round(float(model.intercept_), 4),
                     "Coeff_CPI": round(float(model.coef_[0]), 4),
                     "Coeff_FedRate": round(float(model.coef_[1]), 4),
@@ -280,7 +287,12 @@ def run_linear_regression():
         json.dump(summary, f, indent=4)
         
     print(f"Saved linear regression results JSON: {JSON_OUTPUT_PATH}")
-    print("=" * 65)
+    print("\n" + "=" * 90)
+    print(f"{'Ticker':<8} {'Sector':<18} {'R2 Score':<10} {'MAE (%)':<10} {'MSE':<10} {'Beta CPI':<12} {'Beta FedRate':<12}")
+    print("-" * 90)
+    for r in results:
+        print(f"{r['Ticker']:<8} {r['Sector']:<18} {r['R2_Score']:<10.4f} {r['MAE']:<10.4f} {r['MSE']:<10.4f} {r['Coeff_CPI']:<12.4f} {r['Coeff_FedRate']:<12.4f}")
+    print("=" * 90)
     return summary
 
 if __name__ == "__main__":

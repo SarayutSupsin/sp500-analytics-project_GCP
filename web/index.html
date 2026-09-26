@@ -199,6 +199,7 @@
                                     <th>กลุ่มอุตสาหกรรม</th>
                                     <th>ความแม่นยำ (R²)</th>
                                     <th>ความคลาดเคลื่อน (MAE %)</th>
+                                    <th>ความคลาดเคลื่อน (MSE)</th>
                                     <th>สัมประสิทธิ์เงินเฟ้อ (β CPI)</th>
                                     <th>สัมประสิทธิ์ดอกเบี้ย (β Fed Rate)</th>
                                 </tr>
@@ -226,7 +227,7 @@
         <!-- ========================================== -->
         <section id="tab-content-3" class="tab-content">
             <div class="section-intro card">
-                <h2>วิธีที่ 3: Kaplan-Meier Survival Analysis (วิเคราะห์ระยะเวลาการฟื้นตัวของราคาหุ้น)</h2>
+                <h2 id="tab3-main-title">วิธีที่ 3: Kaplan-Meier Survival Analysis (วิเคราะห์ระยะเวลาการฟื้นตัวของราคาหุ้น)</h2>
                 <p class="description">
                     วิเคราะห์สถิติระยะเวลา (วันปฏิทิน: Calendar Days) ที่ราคาหุ้นใช้ในการฟื้นตัวกลับสู่จุดสูงสุดเดิม (Peak Recovery) หลังจากการย่อตัว (Drawdown > 10%) เพื่อเปรียบเทียบความเร็วในการฟื้นตัวระหว่างกลุ่ม AI-Tech และ Consumer Staples
                 </p>
@@ -294,7 +295,7 @@
                     </div>
                     <div class="kpi-body">
                         <span class="kpi-value" id="km-tech-median">-</span>
-                        <span class="kpi-subtitle" id="km-sub-1">Median Recovery Days</span>
+                        <span class="kpi-subtitle" id="km-sub-1" style="display: none;"></span>
                     </div>
                 </div>
 
@@ -304,17 +305,17 @@
                     </div>
                     <div class="kpi-body">
                         <span class="kpi-value" id="km-staples-median">-</span>
-                        <span class="kpi-subtitle" id="km-sub-2">Median Recovery Days</span>
+                        <span class="kpi-subtitle" id="km-sub-2" style="display: none;"></span>
                     </div>
                 </div>
 
-                <div class="kpi-card highlight-card">
+                <div class="kpi-card highlight-card" id="km-card-3">
                     <div class="kpi-header">
                         <span class="kpi-title" id="km-label-3">ผลการทดสอบสถิติ (Log-Rank Test)</span>
                     </div>
                     <div class="kpi-body">
                         <span class="kpi-value" id="km-logrank-p">-</span>
-                        <span class="kpi-subtitle" id="km-logrank-status">p-value</span>
+                        <span class="kpi-subtitle" id="km-logrank-status"></span>
                     </div>
                 </div>
             </div>
@@ -324,8 +325,8 @@
                 <!-- Left Panel: Kaplan-Meier Curve Chart -->
                 <div class="card chart-panel">
                     <div class="card-header">
-                        <h3>📊 กราฟสถิติโอกาสที่ราคายังไม่ฟื้นตัว (Kaplan-Meier Step Curve)</h3>
-                        <p class="card-subtitle">แกน Y แสดงโอกาส S(t) ที่ราคายังไม่ฟื้นกลับสู่ Peak เดิม | แกน X แสดงจำนวนวันปฏิทิน</p>
+                        <h3>Kaplan-Meier Survival Curve</h3>
+                        <p class="card-subtitle">แกน Y: โอกาสที่ราคายังไม่ฟื้นกลับสู่ระดับสูงสุดเดิม (%) | แกน X: จำนวนวันปฏิทิน</p>
                         <p id="survival-focus-hint" class="chart-focus-hint" style="display: none;"></p>
                     </div>
                     <div class="chart-container" style="min-height: 420px; position: relative;"><canvas id="chart-survival-curve"></canvas></div>
@@ -334,8 +335,8 @@
                 <!-- Right Panel: Ticker Recovery Table -->
                 <div class="card table-panel">
                     <div class="card-header">
-                        <h3>📋 สรุปสถิติระยะเวลาฟื้นตัวรายหุ้น (20 หุ้น)</h3>
-                        <p class="card-subtitle">คลิกที่แถวหุ้นเพื่อดูรายละเอียดสถิติรายตัว</p>
+                        <h3>ระยะเวลาฟื้นตัวรายหุ้น</h3>
+                        <p class="card-subtitle">คลิกเลือกรายหุ้นเพื่อกรองสถิติเปรียบเทียบ</p>
                     </div>
                     <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
                         <table class="data-table" id="table-survival-tickers">
@@ -343,9 +344,9 @@
                                 <tr>
                                     <th>ชื่อหุ้น</th>
                                     <th>กลุ่มอุตสาหกรรม</th>
-                                    <th>Drawdown ปัจจุบัน</th>
-                                    <th>จำนวนครั้งย่อตัว</th>
                                     <th>มัธยฐานวันฟื้นตัว</th>
+                                    <th>จำนวนครั้งย่อตัว</th>
+                                    <th>สถานะการฟื้นตัว</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -354,17 +355,17 @@
                         </table>
                     </div>
                     <div id="ticker-survival-summary-badge" class="selected-summary-box mt-3" style="display: none;">
-                        <!-- Inserted dynamically on click -->
+                        <!-- Hidden to reduce redundant visual clutter -->
                     </div>
                 </div>
             </div>
 
             <!-- Guide Box -->
             <div class="chart-desc card">
-                <strong>💡 คู่มือการอ่านกราฟและสถิติ Kaplan-Meier Analysis</strong>:
-                <br>• 📉 <strong>เส้น Step Curve S(t)</strong>: แสดงโอกาสความน่าจะเป็นที่ราคาหุ้นยังฟื้นตัวกลับสู่จุดสูงสุดเดิม (Peak) ไม่สำเร็จ ณ เวลา t (วันปฏิทิน)
-                <br>• 🔴 <strong>เส้นสีแดง (AI-Tech) vs 🟢 เส้นสีเขียว (Consumer Staples)</strong>: ยิ่งเส้นดิ่งลงมาแตะ 0 เร็ว แสดงว่าหุ้นกลุ่มนั้นฟื้นตัวกลับมาเท่าทุนได้ไวกว่า
-                <br>• ⏱️ <strong>มัธยฐานเวลาฟื้นตัว (Median Days)</strong>: ระยะเวลา (วันปฏิทิน) ที่ 50% ของเหตุการณ์ย่อตัวทั้งหมดฟื้นกลับสู่ Peak เดิมเรียบร้อยแล้ว
+                <strong>คำอธิบายสถิติและการอ่านกราฟ</strong>:
+                <br>• <strong>เส้น Step Curve</strong>: แสดงโอกาสความน่าจะเป็นที่ราคาหุ้นยังฟื้นตัวกลับสู่จุดสูงสุดเดิมไม่สำเร็จ ณ เวลา t (วันปฏิทิน)
+                <br>• <strong>เปรียบเทียบระหว่างกลุ่ม</strong>: ยิ่งเส้นทิ่มหัวดิ่งลงมาแตะ 0 เร็ว แสดงว่าหุ้นกลุ่มนั้นฟื้นตัวกลับมาเท่าทุนได้ไวกว่า
+                <br>• <strong>มัธยฐานเวลาฟื้นตัว (Median Days)</strong>: ระยะเวลา (วันปฏิทิน) ที่ 50% ของเหตุการณ์ย่อตัวทั้งหมดฟื้นตัวสำเร็จเรียบร้อยแล้ว
             </div>
         </section>
     </main>
@@ -377,8 +378,39 @@
         </div>
     </footer>
 
-    <!-- Consolidated Data Payload JS -->
-    <script src="../outputs/dashboard_data.js?v=20260914_11"></script>
-    <script src="app.js?v=20260914_11"></script>
+    <!-- Consolidated Data Payload JS with Automatic Path Fallback Handling -->
+    <script>
+        (function() {
+            function loadScript(primaryUrl, fallbackUrl, callback) {
+                var s = document.createElement('script');
+                s.src = primaryUrl;
+                s.onload = function() {
+                    console.log("Successfully loaded dashboard data from: " + primaryUrl);
+                    if (callback) callback();
+                };
+                s.onerror = function() {
+                    console.warn("Could not load data from " + primaryUrl + ", trying fallback path: " + fallbackUrl);
+                    var fallback = document.createElement('script');
+                    fallback.src = fallbackUrl;
+                    fallback.onload = function() {
+                        console.log("Successfully loaded dashboard data from fallback: " + fallbackUrl);
+                        if (callback) callback();
+                    };
+                    fallback.onerror = function() {
+                        console.error("Failed to load dashboard_data.js from both primary and fallback paths!");
+                    };
+                    document.head.appendChild(fallback);
+                };
+                document.head.appendChild(s);
+            }
+
+            loadScript('./dashboard_data.js', '../outputs/dashboard_data.js', function() {
+                if (typeof initDashboard === 'function') {
+                    initDashboard();
+                }
+            });
+        })();
+    </script>
+    <script src="app.js?v=20260923_02"></script>
 </body>
 </html>

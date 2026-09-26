@@ -17,21 +17,41 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+REPORTS_DIR = os.path.join(OUTPUT_DIR, "reports")
+DATASETS_DIR = os.path.join(OUTPUT_DIR, "raw_json_datasets")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(DATASETS_DIR, exist_ok=True)
+
 STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
 MACRO_CSV_PATH = os.path.join(DATA_DIR, "cpi_fedrate_5y.csv")
-PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_correlation_heatmap.png")
-JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "correlation_results.json")
+PLOT_OUTPUT_PATH = os.path.join(REPORTS_DIR, "plot_correlation_heatmap.png")
+JSON_OUTPUT_PATH = os.path.join(DATASETS_DIR, "correlation_results.json")
 
 # ล็อครายชื่อหุ้น 20 ตัวแยกตาม 2 กลุ่มอุตสาหกรรม (Ticker Level Integrity)
 AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
 STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]
 
+def get_gcp_project_id():
+    env_id = os.environ.get("GCP_PROJECT_ID")
+    if env_id:
+        return env_id
+    try:
+        import google.auth
+        _, project = google.auth.default()
+        if project:
+            return project
+    except Exception:
+        pass
+    return "project-308492-gcp-70-1"
+
+GCP_PROJECT_ID = get_gcp_project_id()
+BIGQUERY_DATASET_ID = "sp500_analytics"
+
 def run_correlation_analysis():
     """
     ขั้นตอนวิเคราะห์วิธีคิดที่ 1: Pearson Correlation Analysis
-    1. อ่านไฟล์ข้อมูลดิบราคาปิดรายเดือนและปัจจัยมหภาค
+    1. อ่านไฟล์ข้อมูลดิบราคาปิดรายเดือนและปัจจัยมหภาคจาก BigQuery Data Warehouse (หรือ Local Fallback)
     2. คำนวณ % ผลตอบแทนรายเดือน (Monthly Return %) แยกรายหุ้นทั้ง 20 ตัว
     3. รวมตารางข้อมูลด้วยคีย์ YearMonth (จับคู่รายเดือน)
     4. คำนวณค่า Pearson Correlation (ค่า r) รายหุ้น (Ticker Level)
@@ -41,11 +61,24 @@ def run_correlation_analysis():
     print("วิธีคิดที่ 1 [METHOD 1]: Pearson Correlation Analysis (Ticker Level)")
     print("=" * 65)
     
-    if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
-        raise FileNotFoundError("ไม่พบไฟล์ข้อมูลดิบ CSV กรุณารัน ingest_raw_data.py ก่อน")
-        
-    df_stock = pd.read_csv(STOCK_CSV_PATH)
-    df_macro = pd.read_csv(MACRO_CSV_PATH)
+    try:
+        from google.cloud import bigquery
+        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
+        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
+        df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
+        if "Fed_Rate" not in df_macro.columns and "Fed_Interest_Rate" in df_macro.columns:
+            df_macro.rename(columns={"Fed_Interest_Rate": "Fed_Rate"}, inplace=True)
+        if "CPI_Inflation_YoY" not in df_macro.columns and "CPI_Inflation_Rate" in df_macro.columns:
+            df_macro.rename(columns={"CPI_Inflation_Rate": "CPI_Inflation_YoY"}, inplace=True)
+        if "Date" not in df_macro.columns and "YearMonth" in df_macro.columns:
+            df_macro.rename(columns={"YearMonth": "Date"}, inplace=True)
+        print(f"[BigQuery Data Warehouse] Querying fact_stock_prices & dim_inflation_rates from '{BIGQUERY_DATASET_ID}'")
+    except Exception as e:
+        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
+        if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
+            raise FileNotFoundError("ไม่พบไฟล์ข้อมูลดิบ CSV กรุณารัน ingest_raw_data.py ก่อน")
+        df_stock = pd.read_csv(STOCK_CSV_PATH)
+        df_macro = pd.read_csv(MACRO_CSV_PATH)
     
     # กรองดัชนีอ้างอิงตลาด S&P 500 (^GSPC) ออกเพื่อคำนวณเฉพาะหุ้นรายตัว 20 ตัว
     df_stock = df_stock[df_stock["Ticker"] != "^GSPC"].copy()

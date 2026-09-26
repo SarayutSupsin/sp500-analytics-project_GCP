@@ -20,7 +20,7 @@ def get_gcp_project_id():
     return "project-308492-gcp-70-1"
 
 GCP_PROJECT_ID = get_gcp_project_id()
-GCS_BUCKET_NAME = "sp500-analytics-raw-data"
+GCS_BUCKET_NAME = "sp500-analytics-bucket"
 BIGQUERY_DATASET_ID = "sp500_analytics"
 
 # Toggle True when deploying with active GCP credentials (or set environment variable ENABLE_GCP_UPLOAD=true)

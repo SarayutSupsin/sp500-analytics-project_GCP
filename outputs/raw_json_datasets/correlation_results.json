@@ -1,0 +1,146 @@
+{
+    "status": "SUCCESS",
+    "ticker_count": 20,
+    "results": [
+        {
+            "Ticker": "NVDA",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.1316,
+            "Corr_FedRate": 0.1706,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "MSFT",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.1102,
+            "Corr_FedRate": 0.0691,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "GOOGL",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.231,
+            "Corr_FedRate": 0.0857,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "META",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.2735,
+            "Corr_FedRate": 0.2777,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "ORCL",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.0603,
+            "Corr_FedRate": 0.0653,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "AMD",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.066,
+            "Corr_FedRate": 0.0772,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "AVGO",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.1312,
+            "Corr_FedRate": 0.1739,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "AMZN",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.1823,
+            "Corr_FedRate": 0.1858,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "AAPL",
+            "Sector": "AI-Tech",
+            "Corr_CPI": -0.0265,
+            "Corr_FedRate": 0.054,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "QCOM",
+            "Sector": "AI-Tech",
+            "Corr_CPI": 0.0004,
+            "Corr_FedRate": 0.0683,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "PG",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.0481,
+            "Corr_FedRate": -0.0229,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "KO",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.069,
+            "Corr_FedRate": -0.0917,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "PEP",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": 0.108,
+            "Corr_FedRate": -0.1708,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "WMT",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.1534,
+            "Corr_FedRate": 0.183,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "COST",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.0583,
+            "Corr_FedRate": -0.0006,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "MDLZ",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": 0.0172,
+            "Corr_FedRate": -0.0652,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "CL",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.0799,
+            "Corr_FedRate": 0.0619,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "GIS",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": 0.2452,
+            "Corr_FedRate": -0.2077,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "TGT",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.1201,
+            "Corr_FedRate": -0.0171,
+            "Sample_Count": 67
+        },
+        {
+            "Ticker": "SYY",
+            "Sector": "Consumer Staples",
+            "Corr_CPI": -0.0877,
+            "Corr_FedRate": -0.0575,
+            "Sample_Count": 67
+        }
+    ]
+}

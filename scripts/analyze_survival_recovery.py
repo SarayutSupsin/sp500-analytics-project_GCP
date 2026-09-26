@@ -12,10 +12,15 @@ BASE_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+REPORTS_DIR = os.path.join(OUTPUT_DIR, "reports")
+DATASETS_DIR = os.path.join(OUTPUT_DIR, "raw_json_datasets")
+
+os.makedirs(REPORTS_DIR, exist_ok=True)
+os.makedirs(DATASETS_DIR, exist_ok=True)
+
 STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
-PLOT_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "plot_survival_curves.png")
-JSON_OUTPUT_PATH = os.path.join(OUTPUT_DIR, "survival_results.json")
+PLOT_OUTPUT_PATH = os.path.join(REPORTS_DIR, "plot_survival_curves.png")
+JSON_OUTPUT_PATH = os.path.join(DATASETS_DIR, "survival_results.json")
 
 AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
 STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]
@@ -97,6 +102,27 @@ def process_survival_dataset(df_stock_subset):
             
     df_events = pd.DataFrame(events_list)
     if len(df_events) == 0:
+        fallback_tickers = []
+        all_tickers = sorted(df_stock_subset["Ticker"].unique())
+        for ticker in all_tickers:
+            sub_df = df_stock_subset[df_stock_subset["Ticker"] == ticker].copy()
+            sub_df["Date"] = pd.to_datetime(sub_df["Date"])
+            sub_df = sub_df.sort_values("Date").reset_index(drop=True)
+            latest_close = sub_df["Close"].iloc[-1] if len(sub_df) > 0 else 0
+            all_time_peak = sub_df["Close"].max() if len(sub_df) > 0 else 0
+            current_dd = ((latest_close - all_time_peak) / all_time_peak) * 100.0 if all_time_peak > 0 else 0.0
+            sector = "AI-Tech" if ticker in AI_TECH_TICKERS else "Consumer Staples"
+            fallback_tickers.append({
+                "Ticker": ticker,
+                "Sector": sector,
+                "Current_Drawdown_Pct": round(float(current_dd), 2),
+                "Max_Historical_Drawdown_Pct": 0.0,
+                "Total_Drawdown_Events": 0,
+                "Median_Recovery_Days": None,
+                "Longest_Recovery_Days": 0,
+                "Shortest_Recovery_Days": 0,
+                "Curve": {"timeline": [0], "survival_probability": [1.0]}
+            })
         return {
             "logrank_p_value": 1.0,
             "statistically_significant": False,
@@ -104,7 +130,7 @@ def process_survival_dataset(df_stock_subset):
             "staples_median_days": None,
             "tech_curve": {"timeline": [0], "survival_probability": [1.0]},
             "staples_curve": {"timeline": [0], "survival_probability": [1.0]},
-            "ticker_level_recovery": []
+            "ticker_level_recovery": fallback_tickers
         }
         
     kmf_tech = KaplanMeierFitter()
@@ -214,29 +240,57 @@ def run_survival_analysis():
     print("Step 5: Kaplan-Meier Survival Analysis & Log-Rank Test")
     print("=" * 65)
     
-    if not os.path.exists(STOCK_CSV_PATH):
-        raise FileNotFoundError("stock_prices_5y.csv missing. Run ingest_raw_data.py first.")
-        
-    df_stock = pd.read_csv(STOCK_CSV_PATH)
+    STOCK_DAILY_PATH = os.path.join(DATA_DIR, "stock_prices_daily_5y.csv")
+    if os.path.exists(STOCK_DAILY_PATH):
+        df_stock = pd.read_csv(STOCK_DAILY_PATH)
+    elif os.path.exists(STOCK_CSV_PATH):
+        df_stock = pd.read_csv(STOCK_CSV_PATH)
+    else:
+        raise FileNotFoundError("Stock price CSV files missing. Run ingest_raw_data.py first.")
+
     df_stock = df_stock[df_stock["Ticker"] != "^GSPC"].copy()
     df_stock["Date"] = pd.to_datetime(df_stock["Date"])
     df_stock = df_stock.sort_values(["Ticker", "Date"]).reset_index(drop=True)
     
-    # Process ALL (5 Years)
-    res_all = process_survival_dataset(df_stock)
+    PERIOD_MAP = {
+        "ALL": ("2021-01-01", "2026-12-31"),
+        "2021-2022": ("2021-01-01", "2022-12-31"),
+        "2023-2024": ("2023-01-01", "2024-12-31"),
+        "2025-2026": ("2025-01-01", "2026-12-31"),
+        "2021": ("2021-01-01", "2021-12-31"),
+        "2022": ("2022-01-01", "2022-12-31"),
+        "2023": ("2023-01-01", "2023-12-31"),
+        "2024": ("2024-01-01", "2024-12-31"),
+        "2025": ("2025-01-01", "2025-12-31"),
+        "2026": ("2026-01-01", "2026-12-31")
+    }
+
+    survival_recovery_by_period = {}
+    for p_key, (s_date, e_date) in PERIOD_MAP.items():
+        sub_period = df_stock[(df_stock["Date"] >= s_date) & (df_stock["Date"] <= e_date)].copy().reset_index(drop=True)
+        if len(sub_period) > 0:
+            survival_recovery_by_period[p_key] = process_survival_dataset(sub_period)
+        else:
+            survival_recovery_by_period[p_key] = process_survival_dataset(df_stock)
+
+    res_all = survival_recovery_by_period["ALL"]
     
-    # Process 2021-2022 (2 Years)
-    df_21_22 = df_stock[(df_stock["Date"] >= "2021-01-01") & (df_stock["Date"] <= "2022-12-31")].copy().reset_index(drop=True)
-    res_21_22 = process_survival_dataset(df_21_22)
-    
-    # Process 2023-2024 (2 Years)
-    df_23_24 = df_stock[(df_stock["Date"] >= "2023-01-01") & (df_stock["Date"] <= "2024-12-31")].copy().reset_index(drop=True)
-    res_23_24 = process_survival_dataset(df_23_24)
-    
-    # Process 2025-2026 (2 Years)
-    df_25_26 = df_stock[df_stock["Date"] >= "2025-01-01"].copy().reset_index(drop=True)
-    res_25_26 = process_survival_dataset(df_25_26)
-    
+    # Save Matplotlib Plot image for report insertion (plot_survival_curves.png)
+    plt.figure(figsize=(10, 6), dpi=150)
+    plt.step(res_all["tech_curve"]["timeline"], res_all["tech_curve"]["survival_probability"], label="AI-Tech Sector", color="#f43f5e", where="post", linewidth=2)
+    plt.step(res_all["staples_curve"]["timeline"], res_all["staples_curve"]["survival_probability"], label="Consumer Staples Sector", color="#10b981", where="post", linewidth=2)
+    plt.axhline(0.5, color="#94a3b8", linestyle="--", alpha=0.7, label="50% Median Recovery Line")
+    plt.title("Kaplan-Meier Survival Curves (5-Year Aggregate)", fontsize=14, fontweight="bold")
+    plt.xlabel("Calendar Days (t)", fontsize=12)
+    plt.ylabel("Probability of Unrecovered Drawdown S(t)", fontsize=12)
+    plt.ylim(0, 1.05)
+    plt.grid(True, linestyle=":", alpha=0.6)
+    plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig(PLOT_OUTPUT_PATH, dpi=150)
+    plt.close()
+    print(f"Generated survival curve plot image: {PLOT_OUTPUT_PATH}")
+
     summary = {
         "status": "SUCCESS",
         "logrank_p_value": res_all["logrank_p_value"],
@@ -246,21 +300,25 @@ def run_survival_analysis():
         "tech_curve": res_all["tech_curve"],
         "staples_curve": res_all["staples_curve"],
         "ticker_level_recovery": res_all["ticker_level_recovery"],
-        "survival_recovery_by_period": {
-            "ALL": res_all,
-            "2021-2022": res_21_22,
-            "2023-2024": res_23_24,
-            "2025-2026": res_25_26
-        }
+        "survival_recovery_by_period": survival_recovery_by_period
     }
     
     with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=4)
         
-    print(f"Saved survival results JSON with multi-period data: {JSON_OUTPUT_PATH}")
-    print("=" * 65)
+    print(f"Saved survival results JSON with multi-period & single-year data: {JSON_OUTPUT_PATH}")
+    print("\n" + "=" * 90)
+    print(f"{'Period (Regime)':<20} {'Log-Rank p-value':<20} {'Significance (p < 0.05)':<25} {'Tech Median':<15} {'Staples Median':<15}")
+    print("-" * 90)
+    for p_k, p_val in survival_recovery_by_period.items():
+        p_str = f"p = {p_val['logrank_p_value']:.4f}"
+        sig_str = "Statistically Significant" if p_val['statistically_significant'] else "Not Significant"
+        t_med = f"{p_val['tech_median_days']} days" if p_val['tech_median_days'] is not None else "Not Recovered"
+        s_med = f"{p_val['staples_median_days']} days" if p_val['staples_median_days'] is not None else "Not Recovered"
+        print(f"{p_k:<20} {p_str:<20} {sig_str:<25} {t_med:<15} {s_med:<15}")
+    print("=" * 90)
     return summary
 
 if __name__ == "__main__":
     run_survival_analysis()
-    run_survival_analysis()
+
