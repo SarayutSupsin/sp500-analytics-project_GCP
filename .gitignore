@@ -1,1 +1,27 @@
-*docs
+# Local Data & EDA (VM fetches fresh data via API)
+data/
+EDA/
+docs/
+*.csv
+
+# Security & Credentials
+*.json
+!package.json
+secrets/
+.env
+
+# Python Cache & Environment
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# System & IDE Junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+*EDA
