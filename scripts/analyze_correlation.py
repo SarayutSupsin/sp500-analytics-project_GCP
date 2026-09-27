@@ -3,6 +3,7 @@
 # หมวดหมู่: สถิติสำรวจความสัมพันธ์เชิงเส้นเบื้องต้น (Exploratory Data Analysis)
 # หน้าที่: คำนวณค่าสัมประสิทธิ์สหสัมพันธ์ Pearson (ค่า r) ระหว่าง % ผลตอบแทนรายเดือน
 #        ของหุ้นรายตัวทั้ง 20 หุ้น เทียบกับ อัตราเงินเฟ้อ (CPI % YoY) และอัตราดอกเบี้ย Fed Rate
+#        โดยใช้ฟังก์ชัน CORR() ของ BigQuery SQL บน GCP โดยตรง
 # ==============================================================================
 
 import os
@@ -12,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# กำหนดเส้นทางไฟล์ข้อมูลดิบ (Inputs) และไฟล์ผลลัพธ์ (Outputs)
+# Path Settings
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(SCRIPT_DIR)
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -23,12 +24,9 @@ DATASETS_DIR = os.path.join(OUTPUT_DIR, "raw_json_datasets")
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(DATASETS_DIR, exist_ok=True)
 
-STOCK_CSV_PATH = os.path.join(DATA_DIR, "stock_prices_5y.csv")
-MACRO_CSV_PATH = os.path.join(DATA_DIR, "cpi_fedrate_5y.csv")
 PLOT_OUTPUT_PATH = os.path.join(REPORTS_DIR, "plot_correlation_heatmap.png")
 JSON_OUTPUT_PATH = os.path.join(DATASETS_DIR, "correlation_results.json")
 
-# ล็อครายชื่อหุ้น 20 ตัวแยกตาม 2 กลุ่มอุตสาหกรรม (Ticker Level Integrity)
 AI_TECH_TICKERS = ["NVDA", "MSFT", "GOOGL", "META", "ORCL", "AMD", "AVGO", "AMZN", "AAPL", "QCOM"]
 STAPLES_TICKERS = ["PG", "KO", "PEP", "WMT", "COST", "MDLZ", "CL", "GIS", "TGT", "SYY"]
 
@@ -50,80 +48,69 @@ BIGQUERY_DATASET_ID = "sp500_analytics"
 
 def run_correlation_analysis():
     """
-    ขั้นตอนวิเคราะห์วิธีคิดที่ 1: Pearson Correlation Analysis
-    1. อ่านไฟล์ข้อมูลดิบราคาปิดรายเดือนและปัจจัยมหภาคจาก BigQuery Data Warehouse (หรือ Local Fallback)
-    2. คำนวณ % ผลตอบแทนรายเดือน (Monthly Return %) แยกรายหุ้นทั้ง 20 ตัว
-    3. รวมตารางข้อมูลด้วยคีย์ YearMonth (จับคู่รายเดือน)
-    4. คำนวณค่า Pearson Correlation (ค่า r) รายหุ้น (Ticker Level)
-    5. ส่งออกไฟล์รูปภาพ Heatmap และไฟล์สรุป correlation_results.json
+    [METHOD 1] Pure GCP BigQuery SQL Pearson Correlation Analysis (Ticker Level)
+    1. Executes BigQuery SQL CORR() function natively inside BigQuery Data Warehouse.
+    2. Calculates Pearson Correlation (r) per ticker against CPI Inflation & Fed Rate.
+    3. Saves plot_correlation_heatmap.png and correlation_results.json for Web Dashboard.
     """
     print("=" * 65)
-    print("วิธีคิดที่ 1 [METHOD 1]: Pearson Correlation Analysis (Ticker Level)")
+    print("Step 4.4.1: Pure GCP BigQuery SQL Pearson Correlation Pipeline")
     print("=" * 65)
     
-    try:
-        from google.cloud import bigquery
-        bq_client = bigquery.Client(project=GCP_PROJECT_ID)
-        df_stock = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`").to_dataframe()
-        df_macro = bq_client.query(f"SELECT * FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`").to_dataframe()
-        if "Fed_Rate" not in df_macro.columns and "Fed_Interest_Rate" in df_macro.columns:
-            df_macro.rename(columns={"Fed_Interest_Rate": "Fed_Rate"}, inplace=True)
-        if "CPI_Inflation_YoY" not in df_macro.columns and "CPI_Inflation_Rate" in df_macro.columns:
-            df_macro.rename(columns={"CPI_Inflation_Rate": "CPI_Inflation_YoY"}, inplace=True)
-        if "Date" not in df_macro.columns and "YearMonth" in df_macro.columns:
-            df_macro.rename(columns={"YearMonth": "Date"}, inplace=True)
-        print(f"[BigQuery Data Warehouse] Querying fact_stock_prices & dim_inflation_rates from '{BIGQUERY_DATASET_ID}'")
-    except Exception as e:
-        print(f"[Local Fallback] BigQuery query notice ({e}), loading local CSV files...")
-        if not os.path.exists(STOCK_CSV_PATH) or not os.path.exists(MACRO_CSV_PATH):
-            raise FileNotFoundError("ไม่พบไฟล์ข้อมูลดิบ CSV กรุณารัน ingest_raw_data.py ก่อน")
-        df_stock = pd.read_csv(STOCK_CSV_PATH)
-        df_macro = pd.read_csv(MACRO_CSV_PATH)
+    from google.cloud import bigquery
+    bq_client = bigquery.Client(project=GCP_PROJECT_ID)
     
-    # กรองดัชนีอ้างอิงตลาด S&P 500 (^GSPC) ออกเพื่อคำนวณเฉพาะหุ้นรายตัว 20 ตัว
-    df_stock = df_stock[df_stock["Ticker"] != "^GSPC"].copy()
+    # BigQuery SQL Query using Native CORR() Aggregate Function
+    bq_corr_sql = f"""
+    WITH stock_returns AS (
+        SELECT 
+            Ticker,
+            FORMAT_DATE('%Y-%m', Date) AS YearMonth,
+            (Close - LAG(Close, 1) OVER (PARTITION BY Ticker ORDER BY Date)) / NULLIF(LAG(Close, 1) OVER (PARTITION BY Ticker ORDER BY Date), 0) * 100 AS Monthly_Return
+        FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.fact_stock_prices`
+        WHERE Ticker != '^GSPC'
+    ),
+    macro_indicators AS (
+        SELECT 
+            SUBSTR(CAST(Date AS STRING), 1, 7) AS YearMonth,
+            CPI_Inflation_YoY,
+            Fed_Rate
+        FROM `{GCP_PROJECT_ID}.{BIGQUERY_DATASET_ID}.dim_inflation_rates`
+    )
+    SELECT 
+        s.Ticker,
+        CORR(s.Monthly_Return, m.CPI_Inflation_YoY) AS Corr_CPI,
+        CORR(s.Monthly_Return, m.Fed_Rate) AS Corr_FedRate,
+        COUNT(*) AS Sample_Count
+    FROM stock_returns s
+    JOIN macro_indicators m ON s.YearMonth = m.YearMonth
+    WHERE s.Monthly_Return IS NOT NULL 
+      AND m.CPI_Inflation_YoY IS NOT NULL 
+      AND m.Fed_Rate IS NOT NULL
+    GROUP BY s.Ticker
+    ORDER BY s.Ticker
+    """
     
-    # --- สเต็ปที่ 1: คำนวณ % ผลตอบแทนรายเดือน (Monthly Return %) แยกรายหุ้น ---
-    df_stock["Date"] = pd.to_datetime(df_stock["Date"])
-    df_stock["YearMonth"] = df_stock["Date"].dt.strftime("%Y-%m")
+    print("[1/2] Executing BigQuery SQL CORR() Query on GCP Data Warehouse...")
+    df_res = bq_client.query(bq_corr_sql).to_dataframe()
     
-    # เรียงลำดับตามวันที่เพื่อคำนวณ % การเปลี่ยนแปลงของราคาปิด (pct_change)
-    df_stock = df_stock.sort_values(["Ticker", "Date"]).reset_index(drop=True)
-    df_stock["Monthly_Return"] = df_stock.groupby("Ticker")["Close"].pct_change() * 100.0
-    
-    # ลบแถวแรกของแต่ละหุ้นที่เป็น NaN ออก (แถวแรกไม่มีเดือนก่อนหน้าให้เปรียบเทียบ)
-    df_stock = df_stock.dropna(subset=["Monthly_Return"])
-    
-    # --- สเต็ปที่ 2: จับคู่ตารางข้อมูลรายเดือนเข้ากับ CPI YoY และ Fed Rate ---
-    df_macro["YearMonth"] = pd.to_datetime(df_macro["Date"]).dt.strftime("%Y-%m")
-    df_merged = pd.merge(df_stock, df_macro, on="YearMonth", how="inner", suffixes=("_stock", "_macro"))
-    
-    # --- สเต็ปที่ 3: คำนวณ Pearson Correlation (ค่า r) แยกราย Ticker ทั้ง 20 ตัว ---
     results = []
-    tickers_list = AI_TECH_TICKERS + STAPLES_TICKERS
+    for _, r in df_res.iterrows():
+        ticker = r["Ticker"]
+        sector = "AI-Tech" if ticker in AI_TECH_TICKERS else "Consumer Staples"
+        results.append({
+            "Ticker": ticker,
+            "Sector": sector,
+            "Corr_CPI": round(float(r["Corr_CPI"]), 4) if pd.notnull(r["Corr_CPI"]) else 0.0,
+            "Corr_FedRate": round(float(r["Corr_FedRate"]), 4) if pd.notnull(r["Corr_FedRate"]) else 0.0,
+            "Sample_Count": int(r["Sample_Count"])
+        })
+        
+    df_res_formatted = pd.DataFrame(results)
     
-    for ticker in tickers_list:
-        sub = df_merged[df_merged["Ticker"] == ticker]
-        if len(sub) > 5:
-            # คำนวณค่า r ระหว่าง Return % กับ CPI และ Fed Rate จากจุดข้อมูลรายเดือนทั้งหมด (n งวด)
-            corr_cpi = sub["Monthly_Return"].corr(sub["CPI_Inflation_YoY"])
-            corr_fed = sub["Monthly_Return"].corr(sub["Fed_Rate"])
-            sector = "AI-Tech" if ticker in AI_TECH_TICKERS else "Consumer Staples"
-            
-            results.append({
-                "Ticker": ticker,
-                "Sector": sector,
-                "Corr_CPI": round(float(corr_cpi), 4) if not np.isnan(corr_cpi) else 0.0,
-                "Corr_FedRate": round(float(corr_fed), 4) if not np.isnan(corr_fed) else 0.0,
-                "Sample_Count": len(sub)
-            })
-            
-    df_res = pd.DataFrame(results)
-    
-    # --- สเต็ปที่ 4: บันทึกรูปภาพ Correlation Heatmap ---
+    # Save Heatmap Image
     plt.figure(figsize=(12, 8))
-    pivot_df = df_res.set_index("Ticker")[["Corr_CPI", "Corr_FedRate"]]
-    
+    pivot_df = df_res_formatted.set_index("Ticker")[["Corr_CPI", "Corr_FedRate"]]
     sns.heatmap(pivot_df, annot=True, fmt=".2f", cmap="coolwarm", vmin=-1.0, vmax=1.0, linewidths=0.5)
     plt.title("Pearson Correlation Heatmap: Stock Monthly Returns vs Macro Indicators\n(20 Selected S&P 500 Tickers: 2021-2026)", fontsize=13, pad=15)
     plt.ylabel("Ticker (GICS Sector)", fontsize=11)
@@ -132,21 +119,19 @@ def run_correlation_analysis():
     plt.savefig(PLOT_OUTPUT_PATH, dpi=300)
     plt.close()
     
-    print(f"บันทึกรูปภาพ Correlation Heatmap สำเร็จ: {PLOT_OUTPUT_PATH}")
+    print(f"[Plot Output] Saved Correlation Heatmap Image: {PLOT_OUTPUT_PATH}")
     
-    # --- สเต็ปที่ 5: ส่งออกไฟล์สรุปผลลัพธ์ JSON สำหรับ Dashboard ---
+    # Export JSON
     summary_data = {
         "status": "SUCCESS",
-        "ticker_count": len(df_res),
+        "ticker_count": len(results),
         "results": results
     }
     with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=4)
         
-    print(f"บันทึกไฟล์สรุปผลลัพธ์ JSON สำเร็จ: {JSON_OUTPUT_PATH}")
-    print("=" * 65)
+    print(f"[GCP Output] Successfully saved Pure BigQuery SQL Correlation JSON to {JSON_OUTPUT_PATH}")
     return summary_data
 
 if __name__ == "__main__":
     run_correlation_analysis()
-
